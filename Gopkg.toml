@@ -22,10 +22,6 @@
 
 
 [[constraint]]
-  name = "github.com/aws/aws-sdk-go"
-  version = "1.14.9"
-
-[[constraint]]
   branch = "master"
   name = "github.com/mitchellh/go-homedir"
 
@@ -36,3 +32,7 @@
 [[constraint]]
   name = "github.com/spf13/viper"
   version = "1.0.2"
+
+[[constraint]]
+  name = "github.com/aws/aws-sdk-go-v2"
+  version = "2.0.0-preview.4"
