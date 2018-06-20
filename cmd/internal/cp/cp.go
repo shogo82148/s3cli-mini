@@ -3,6 +3,7 @@ package cp
 import (
 	"io"
 	"log"
+	"mime"
 	"net/url"
 	"os"
 	"path"
@@ -100,6 +101,13 @@ func (c *client) newWriter(s, name string) (io.WriteCloser, error) {
 		if strings.HasSuffix(u.Path, "/") {
 			u.Path += name
 		}
+		var t string
+		if idx := strings.LastIndex(u.Path, "."); idx >= 0 {
+			t = mime.TypeByExtension(u.Path[idx:])
+		}
+		if t == "" {
+			t = "application/octet-stream"
+		}
 		r, w := io.Pipe()
 		uploader := &uploader{
 			WriteCloser: w,
@@ -109,9 +117,10 @@ func (c *client) newWriter(s, name string) (io.WriteCloser, error) {
 		go func() {
 			defer uploader.wg.Done()
 			_, err := uploader.uploader.Upload(&s3manager.UploadInput{
-				Bucket: aws.String(u.Host),
-				Key:    aws.String(strings.TrimPrefix(u.Path, "/")),
-				Body:   r,
+				Bucket:      aws.String(u.Host),
+				Key:         aws.String(strings.TrimPrefix(u.Path, "/")),
+				Body:        r,
+				ContentType: aws.String(t),
 			})
 			uploader.err = err
 		}()
