@@ -42,13 +42,21 @@ func Run(cmd *cobra.Command, args []string) {
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer src.Close()
+	defer func() {
+		if err := src.Close(); err != nil {
+			log.Fatal(err)
+		}
+	}()
 
 	dest, err := c.newWriter(args[1], name)
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer dest.Close()
+	defer func() {
+		if err := dest.Close(); err != nil {
+			log.Fatal(err)
+		}
+	}()
 
 	if _, err := io.Copy(dest, src); err != nil {
 		log.Fatal(err)
@@ -115,6 +123,7 @@ func (c *client) newWriter(s, name string) (io.WriteCloser, error) {
 		}
 		uploader.wg.Add(1)
 		go func() {
+			defer r.Close()
 			defer uploader.wg.Done()
 			_, err := uploader.uploader.Upload(&s3manager.UploadInput{
 				Bucket:      aws.String(u.Host),
@@ -122,6 +131,9 @@ func (c *client) newWriter(s, name string) (io.WriteCloser, error) {
 				Body:        r,
 				ContentType: aws.String(t),
 			})
+			if err != nil {
+				r.CloseWithError(err)
+			}
 			uploader.err = err
 		}()
 		return uploader, nil
