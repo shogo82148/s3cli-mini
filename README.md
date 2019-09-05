@@ -26,6 +26,6 @@ s3cli-mini cp foobar.zip s3://your-bucket/
 s3cli-mini cp s3://your-bucket/foobar.zip s3://another-bucket/
 ```
 
-## Licenese
+## Licence
 
 The MIT License. See LICENSE file.
