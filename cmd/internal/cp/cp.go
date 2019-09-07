@@ -1,6 +1,7 @@
 package cp
 
 import (
+	"context"
 	"io"
 	"log"
 	"mime"
@@ -14,13 +15,14 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/aws/external"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/aws/aws-sdk-go-v2/service/s3/s3iface"
 	"github.com/aws/aws-sdk-go-v2/service/s3/s3manager"
 	"github.com/aws/aws-sdk-go-v2/service/s3/s3manager/s3manageriface"
 	"github.com/spf13/cobra"
 )
 
 type client struct {
-	s3 *s3.S3
+	s3 s3iface.ClientAPI
 }
 
 // Run runs cp command.
@@ -73,7 +75,7 @@ func (c *client) newReader(s string) (io.ReadCloser, string, error) {
 			Bucket: aws.String(u.Host),
 			Key:    aws.String(strings.TrimPrefix(u.Path, "/")),
 		})
-		resp, err := req.Send()
+		resp, err := req.Send(context.Background())
 		if err != nil {
 			return nil, "", err
 		}
