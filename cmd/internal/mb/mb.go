@@ -7,9 +7,9 @@ import (
 	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/aws/external"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/spf13/cobra"
+	"github.com/shogo82148/s3cli-mini/cmd/internal/config"
 )
 
 // Run runs cp command.
@@ -21,10 +21,10 @@ func Run(cmd *cobra.Command, args []string) {
 		}
 		return
 	}
-
+	
 	bucketName := strings.TrimPrefix(args[0], "s3://")
 
-	cfg, err := external.LoadDefaultAWSConfig()
+	cfg, err := config.LoadAWSConfig()
 	if err != nil {
 		log.Fatal(err)
 	}
