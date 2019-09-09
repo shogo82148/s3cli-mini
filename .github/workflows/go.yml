@@ -10,7 +10,9 @@ jobs:
       localstack:
         image: localstack/localstack:0.10.2
         ports:
-        - "4567-4584:4567-4584"
+        - "4572:4572"
+        env:
+          SERVICES: s3
 
     steps:
 
@@ -26,3 +28,4 @@ jobs:
       run: make test
       env:
         GO111MODULE: "on"
+        S3MINI_TEST_ENDPOINT: http://localhost:4572
