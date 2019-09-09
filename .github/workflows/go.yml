@@ -5,6 +5,13 @@ jobs:
   test:
     name: Test
     runs-on: ubuntu-latest
+
+    services:
+      localstack:
+        image: localstack/localstack:0.10.2
+        ports:
+        - "4567-4584:4567-4584"
+
     steps:
 
     - name: Set up Go 1.13
