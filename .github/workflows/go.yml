@@ -27,6 +27,7 @@ jobs:
     - name: Test
       run: |
         echo $S3MINI_TEST_ENDPOINT
+        /usr/bin/docker ps
         make test
       env:
         GO111MODULE: "on"
