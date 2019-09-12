@@ -30,4 +30,4 @@ jobs:
         make test
       env:
         GO111MODULE: "on"
-        S3MINI_TEST_ENDPOINT: "${{ format('http://{0}', job.services.localstack.ports['4572']) }}"
+        S3MINI_TEST_ENDPOINT: "http://localhost:4572"
