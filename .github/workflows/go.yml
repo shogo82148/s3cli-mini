@@ -28,8 +28,10 @@ jobs:
 
     - name: Test
       run: |
+        echo $JOB_CONTEXT
         curl $S3MINI_TEST_ENDPOINT
         make test
       env:
         GO111MODULE: "on"
+        JOB_CONTEXT: ${{ toJson(job) }}
         S3MINI_TEST_ENDPOINT: "http://localstack:4572"
