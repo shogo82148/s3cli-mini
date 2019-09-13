@@ -28,6 +28,7 @@ jobs:
 
     - name: Test
       run: |
+        curl $S3MINI_TEST_ENDPOINT
         make test
       env:
         GO111MODULE: "on"
