@@ -32,4 +32,4 @@ jobs:
       env:
         GO111MODULE: "on"
         LOCALSTACK: "${{ job.services.localstack.id }}"
-        S3MINI_TEST_ENDPOINT: "http://127.0.0.1:4572"
+        S3MINI_TEST_ENDPOINT: "http://172.18.0.2:4572"
