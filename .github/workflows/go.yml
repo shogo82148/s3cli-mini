@@ -26,10 +26,8 @@ jobs:
 
     - name: Test
       run: |
-        echo $JOB_CONTEXT
         curl $S3MINI_TEST_ENDPOINT
         make test
       env:
         GO111MODULE: "on"
-        CONTEXT: "${{ job.services }}"
         S3MINI_TEST_ENDPOINT: "http://127.0.0.1:4572"
