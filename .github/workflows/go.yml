@@ -13,7 +13,7 @@ jobs:
         - "4572:4572"
         env:
           SERVICES: s3
-        options: --health-cmd="/usr/bin/awslocal s3 ls"
+        options: --health-cmd="true"
 
     steps:
 
