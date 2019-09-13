@@ -5,6 +5,8 @@ jobs:
   test:
     name: Test
     runs-on: ubuntu-latest
+    container:
+      image: golang:1.13.0-buster
 
     services:
       localstack:
