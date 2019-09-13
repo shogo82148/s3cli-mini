@@ -14,7 +14,7 @@ jobs:
         env:
           SERVICES: s3
         options: >-
-          --health-cmd="/usr/bin/curl -f http://localhost:4572 || exit 1"
+          --health-cmd="/usr/bin/curl --silent --fail --output /dev/null http://localhost:4572 || exit 1"
           --health-start-period 10s
           --health-interval 10s
           --health-timeout 5s
