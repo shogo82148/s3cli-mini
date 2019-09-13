@@ -13,12 +13,7 @@ jobs:
         - "4572:4572"
         env:
           SERVICES: s3
-        options: >-
-          --health-cmd="/usr/bin/curl --silent --fail --output /dev/null http://localhost:4572 || exit 1"
-          --health-start-period 10s
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 10
+        options: --health-cmd="/usr/bin/curl --silent --fail --output /dev/null http://localhost:4572 || exit 1" --health-start-period 10s --health-interval 10s --health-timeout 5s --health-retries 10
 
     steps:
 
