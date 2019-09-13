@@ -5,8 +5,6 @@ jobs:
   test:
     name: Test
     runs-on: ubuntu-latest
-    container:
-      image: golang:1.13.0-buster
 
     services:
       localstack:
@@ -33,4 +31,5 @@ jobs:
         make test
       env:
         GO111MODULE: "on"
-        S3MINI_TEST_ENDPOINT: "${{ format('http://{0}:4572', job.services.localstack.id) }}"
+        CONTEXT: "${{ job.services }}"
+        S3MINI_TEST_ENDPOINT: "http://127.0.0.1:4572"
