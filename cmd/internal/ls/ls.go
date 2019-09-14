@@ -13,6 +13,13 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var recursive bool
+
+// Init initializes flags.
+func Init(cmd *cobra.Command) {
+	cmd.Flags().BoolVar(&recursive, "recursive", false, "Command is performed on all files or objects under the specified directory or prefix.")
+}
+
 // Run runs mb command.
 func Run(cmd *cobra.Command, args []string) {
 	svc, err := config.NewS3Client()
@@ -46,11 +53,13 @@ func listBuckets(cmd *cobra.Command, svc s3iface.ClientAPI) {
 func listObjects(cmd *cobra.Command, svc s3iface.ClientAPI, path string) {
 	bucket, key := parsePath(path)
 	input := &s3.ListObjectsV2Input{
-		Bucket:    aws.String(bucket),
-		Delimiter: aws.String("/"),
+		Bucket: aws.String(bucket),
 	}
 	if key != "" {
 		input.Prefix = aws.String(key)
+	}
+	if !recursive {
+		input.Delimiter = aws.String("/")
 	}
 	req := svc.ListObjectsV2Request(input)
 	p := s3.NewListObjectsV2Paginator(req)

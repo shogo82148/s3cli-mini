@@ -59,4 +59,5 @@ See 'aws help' for descriptions of global parameters.`,
 
 func init() {
 	rootCmd.AddCommand(lsCmd)
+	ls.Init(lsCmd)
 }

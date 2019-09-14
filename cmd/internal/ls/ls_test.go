@@ -142,3 +142,46 @@ func TestLS_ListObjects(t *testing.T) {
 		t.Errorf("unexpected result: %s", buf.String())
 	}
 }
+
+func TestLS_recursive(t *testing.T) {
+	if err := config.SetupTest(t); err != nil {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	recursive = true
+	defer func() {
+		recursive = false
+	}()
+
+	svc, err := config.NewS3Client()
+	if err != nil {
+		t.Fatal(err)
+	}
+	cleanup, err := prepareBucket(ctx, svc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cleanup()
+
+	// test
+	var buf bytes.Buffer
+	cmd := &cobra.Command{}
+	cmd.SetOut(&buf)
+	Run(cmd, []string{"s3://bucket-for-test"})
+
+	re := regexp.MustCompile(`\A\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}          5 a.txt
+\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}          7 foo.zip
+\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}         14 foo/bar/.baz/a
+\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}         14 foo/bar/.baz/b
+\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}         14 foo/bar/.baz/c
+\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}         14 foo/bar/.baz/d
+\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}         14 foo/bar/.baz/e
+\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}         22 foo/bar/.baz/hooks/bar
+\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}         22 foo/bar/.baz/hooks/foo
+\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}          5 z.txt
+\z`)
+	if !re.Match(buf.Bytes()) {
+		t.Errorf("unexpected result: %s", buf.String())
+	}
+}
