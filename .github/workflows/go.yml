@@ -29,10 +29,7 @@ jobs:
 
     - name: Test
       run: |
-        docker logs $LOCALSTACK
-        curl $S3MINI_TEST_ENDPOINT
         make test
       env:
         GO111MODULE: "on"
-        LOCALSTACK: "${{ job.services.localstack.id }}"
         S3MINI_TEST_ENDPOINT: "http://localhost:4572"
