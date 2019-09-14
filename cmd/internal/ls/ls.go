@@ -2,6 +2,8 @@ package ls
 
 import (
 	"context"
+	"fmt"
+	"math"
 	"os"
 	"strings"
 	"time"
@@ -14,10 +16,12 @@ import (
 )
 
 var recursive bool
+var humanReadable bool
 
 // Init initializes flags.
 func Init(cmd *cobra.Command) {
 	cmd.Flags().BoolVar(&recursive, "recursive", false, "Command is performed on all files or objects under the specified directory or prefix.")
+	cmd.Flags().BoolVar(&humanReadable, "human-readable", false, "Displays file sizes in human readable format.")
 }
 
 // Run runs mb command.
@@ -104,9 +108,34 @@ func parsePath(path string) (bucket, key string) {
 func printObject(cmd *cobra.Command, obj s3.Object) {
 	date := aws.TimeValue(obj.LastModified).In(time.Local).Format("2006-01-02 15:04:05")
 	size := aws.Int64Value(obj.Size)
-	cmd.Printf("%s %10d %s\n", date, size, aws.StringValue(obj.Key))
+	if humanReadable {
+		cmd.Printf("%s %10s %s\n", date, makeHumanReadable(size), aws.StringValue(obj.Key))
+	} else {
+		cmd.Printf("%s %10d %s\n", date, size, aws.StringValue(obj.Key))
+	}
 }
 
 func printPrefix(cmd *cobra.Command, prefix s3.CommonPrefix) {
 	cmd.Printf("                           PRE %s\n", aws.StringValue(prefix.Prefix))
+}
+
+// port of https://github.com/aws/aws-cli/blob/072688cc07578144060aead8b75556fd986e0f2f/awscli/customizations/s3/utils.py#L47-L77
+func makeHumanReadable(size int64) string {
+	if size == 1 {
+		return "1 Byte"
+	}
+	if size < 1024 {
+		return fmt.Sprintf("%d Bytes", size)
+	}
+
+	base := 1024.0
+	bytes := float64(size)
+	for i, suffix := range [...]string{"KiB", "MiB", "GiB", "TiB", "PiB"} {
+		unit := float64(int(base*base) << (i * 10))
+		if math.Round(bytes/unit*float64(base)) < float64(base) {
+			return fmt.Sprintf("%.1f %s", (base*bytes)/unit, suffix)
+		}
+	}
+
+	return fmt.Sprintf("%.1f EiB", (base*bytes)/float64(1<<70))
 }

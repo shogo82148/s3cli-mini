@@ -185,3 +185,27 @@ func TestLS_recursive(t *testing.T) {
 		t.Errorf("unexpected result: %s", buf.String())
 	}
 }
+
+func TestMakeHumanReadable(t *testing.T) {
+	// port of https://github.com/aws/aws-cli/blob/072688cc07578144060aead8b75556fd986e0f2f/tests/unit/customizations/s3/test_utils.py#L50-L68
+	cases := []struct {
+		in  int64
+		out string
+	}{
+		{0, "0 Bytes"},
+		{1, "1 Byte"},
+		{1000, "1000 Bytes"},
+		{1 << 10, "1.0 KiB"},
+		{1 << 20, "1.0 MiB"},
+		{1 << 30, "1.0 GiB"},
+		{1 << 40, "1.0 TiB"},
+		{1 << 50, "1.0 PiB"},
+		{1 << 60, "1.0 EiB"},
+	}
+	for _, tt := range cases {
+		got := makeHumanReadable(tt.in)
+		if got != tt.out {
+			t.Errorf("%d byte(s): want %s, got %s", tt.in, tt.out, got)
+		}
+	}
+}
