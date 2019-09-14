@@ -3,7 +3,6 @@ package cp
 import (
 	"context"
 	"io"
-	"log"
 	"mime"
 	"net/url"
 	"os"
@@ -28,7 +27,7 @@ type client struct {
 // Run runs cp command.
 func Run(cmd *cobra.Command, args []string) {
 	if len(args) != 2 {
-		log.Println("usage: cp <LocalPath> <S3Uri> or <S3Uri> <LocalPath> or <S3Uri> <S3Uri>")
+		cmd.Usage()
 		return
 	}
 
