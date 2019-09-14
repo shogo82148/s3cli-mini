@@ -104,8 +104,9 @@ func TestLS_ListBuckets(t *testing.T) {
 	cmd.SetOut(&buf)
 	Run(cmd, []string{})
 
-	if buf.String() != "2006-02-04 01:45:09 bucket-for-test\n" {
-		t.Errorf("want 2006-02-04 01:45:09 bucket-for-test, got %s", buf.String())
+	re := regexp.MustCompile(`(?m)^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} bucket-for-test$`)
+	if !re.Match(buf.Bytes()) {
+		t.Errorf("unexpected result: %s", buf.String())
 	}
 }
 
