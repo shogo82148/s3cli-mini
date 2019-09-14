@@ -93,7 +93,7 @@ func parsePath(path string) (bucket, key string) {
 }
 
 func printObject(cmd *cobra.Command, obj s3.Object) {
-	date := aws.TimeValue(obj.LastModified).Format("2006-01-02 15:04:05")
+	date := aws.TimeValue(obj.LastModified).In(time.Local).Format("2006-01-02 15:04:05")
 	size := aws.Int64Value(obj.Size)
 	cmd.Printf("%s %10d %s\n", date, size, aws.StringValue(obj.Key))
 }
