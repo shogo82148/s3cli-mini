@@ -3,6 +3,7 @@ package mb
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
@@ -15,18 +16,24 @@ func TestMB(t *testing.T) {
 		return
 	}
 
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
 	svc, err := config.NewS3Client()
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	svc.DeleteBucketRequest(&s3.DeleteBucketInput{
-		Bucket: aws.String("bucket-for-test"),
-	}).Send(context.Background())
+	defer func() {
+		// clean up
+		svc.DeleteBucketRequest(&s3.DeleteBucketInput{
+			Bucket: aws.String("bucket-for-test"),
+		}).Send(ctx)
+	}()
 
 	Run(&cobra.Command{}, []string{"s3://bucket-for-test"})
 
-	resp, err := svc.ListBucketsRequest(&s3.ListBucketsInput{}).Send(context.Background())
+	resp, err := svc.ListBucketsRequest(&s3.ListBucketsInput{}).Send(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
