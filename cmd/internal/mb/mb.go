@@ -8,11 +8,11 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
-	"github.com/spf13/cobra"
 	"github.com/shogo82148/s3cli-mini/cmd/internal/config"
+	"github.com/spf13/cobra"
 )
 
-// Run runs cp command.
+// Run runs mb command.
 func Run(cmd *cobra.Command, args []string) {
 	if len(args) != 1 {
 		log.Println("bucket name is missing.")
@@ -21,14 +21,13 @@ func Run(cmd *cobra.Command, args []string) {
 		}
 		return
 	}
-	
+
 	bucketName := strings.TrimPrefix(args[0], "s3://")
 
-	cfg, err := config.LoadAWSConfig()
+	svc, err := config.NewS3Client()
 	if err != nil {
 		log.Fatal(err)
 	}
-	svc := s3.New(cfg)
 
 	req := svc.CreateBucketRequest(&s3.CreateBucketInput{
 		Bucket: aws.String(bucketName),
