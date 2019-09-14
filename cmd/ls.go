@@ -35,23 +35,23 @@ Synopsis
 ls
 <S3Uri> or NONE
 [--recursive]
-[--page-size <value>]
+[--page-size <value>] (NOT SUPPORTED)
 [--human-readable]
 [--summarize]
-[--request-payer <value>]
+[--request-payer <value>] (NOT SUPPORTED)
 
 Options
 paths (string)
 
 --recursive (boolean) Command is performed on all files or objects under the specified directory or prefix.
 
---page-size (integer) The number of results to return in each response to a list operation. The default value is 1000 (the maximum allowed). Using a lower value may help if an operation times out.
+--page-size (integer) (NOT SUPPORTED) The number of results to return in each response to a list operation. The default value is 1000 (the maximum allowed). Using a lower value may help if an operation times out.
 
 --human-readable (boolean) Displays file sizes in human readable format.
 
 --summarize (boolean) Displays summary information (number of objects, total size).
 
---request-payer (string) Confirms that the requester knows that she or he will be charged for the request. Bucket owners need not specify this parameter in their requests. Documentation on downloading objects from requester pays buckets can be found at http://docs.aws.amazon.com/AmazonS3/latest/dev/ObjectsinRequesterPaysBuckets.html
+--request-payer (string) (NOT SUPPORTED) Confirms that the requester knows that she or he will be charged for the request. Bucket owners need not specify this parameter in their requests. Documentation on downloading objects from requester pays buckets can be found at http://docs.aws.amazon.com/AmazonS3/latest/dev/ObjectsinRequesterPaysBuckets.html
 
 See 'aws help' for descriptions of global parameters.`,
 	Run: ls.Run,
