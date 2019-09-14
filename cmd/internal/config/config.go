@@ -18,12 +18,14 @@ var mu sync.Mutex
 var awsConfigLoaded bool
 var awsConfig aws.Config
 var awsRegion string
+var awsProfile string
 var inTest bool
 
 // InitFlag initializes global configure.
 func InitFlag(cmd *cobra.Command) {
 	flags := cmd.PersistentFlags()
 	flags.StringVar(&awsRegion, "region", "", "The region to use. Overrides config/env settings.")
+	flags.StringVar(&awsProfile, "profile", "", "Use a specific profile from your credential file.")
 }
 
 // LoadAWSConfig returns aws.Config.
@@ -39,6 +41,9 @@ func LoadAWSConfig() (aws.Config, error) {
 
 	if awsRegion != "" {
 		configs = append(configs, external.WithRegion(awsRegion))
+	}
+	if awsProfile != "" {
+		configs = append(configs, external.WithSharedConfigProfile(awsProfile))
 	}
 
 	// Load default config
