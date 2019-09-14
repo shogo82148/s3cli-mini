@@ -13,7 +13,7 @@ jobs:
         - "4572:4572"
         env:
           SERVICES: s3
-        options: --health-cmd="true" --workdir /opt/code/localstack
+        options: --workdir /opt/code/localstack
 
     steps:
 
