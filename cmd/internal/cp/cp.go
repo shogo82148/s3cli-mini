@@ -13,11 +13,11 @@ import (
 	"sync"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/aws/external"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/s3/s3iface"
 	"github.com/aws/aws-sdk-go-v2/service/s3/s3manager"
 	"github.com/aws/aws-sdk-go-v2/service/s3/s3manager/s3manageriface"
+	"github.com/shogo82148/s3cli-mini/cmd/internal/config"
 	"github.com/spf13/cobra"
 )
 
@@ -32,36 +32,39 @@ func Run(cmd *cobra.Command, args []string) {
 		return
 	}
 
-	cfg, err := external.LoadDefaultAWSConfig()
+	svc, err := config.NewS3Client()
 	if err != nil {
-		log.Fatal(err)
+		cmd.PrintErrln(err)
+		os.Exit(1)
 	}
 	c := &client{
-		s3: s3.New(cfg),
+		s3: svc,
 	}
 
 	src, name, err := c.newReader(args[0])
 	if err != nil {
-		log.Fatal(err)
+		cmd.PrintErrln(err)
+		os.Exit(1)
 	}
 	defer func() {
-		if err := src.Close(); err != nil {
-			log.Fatal(err)
-		}
+		src.Close()
 	}()
 
 	dest, err := c.newWriter(args[1], name)
 	if err != nil {
-		log.Fatal(err)
+		cmd.PrintErrln(err)
+		os.Exit(1)
 	}
 	defer func() {
 		if err := dest.Close(); err != nil {
-			log.Fatal(err)
+			cmd.PrintErrln(err)
+			os.Exit(1)
 		}
 	}()
 
 	if _, err := io.Copy(dest, src); err != nil {
-		log.Fatal(err)
+		cmd.PrintErrln(err)
+		os.Exit(1)
 	}
 }
 
