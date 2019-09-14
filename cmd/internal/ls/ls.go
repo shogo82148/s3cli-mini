@@ -17,11 +17,13 @@ import (
 
 var recursive bool
 var humanReadable bool
+var summarize bool
 
 // Init initializes flags.
 func Init(cmd *cobra.Command) {
 	cmd.Flags().BoolVar(&recursive, "recursive", false, "Command is performed on all files or objects under the specified directory or prefix.")
 	cmd.Flags().BoolVar(&humanReadable, "human-readable", false, "Displays file sizes in human readable format.")
+	cmd.Flags().BoolVar(&summarize, "summarize", false, "Displays summary information (number of objects, total size).")
 }
 
 // Run runs mb command.
@@ -65,16 +67,20 @@ func listObjects(cmd *cobra.Command, svc s3iface.ClientAPI, path string) {
 	if !recursive {
 		input.Delimiter = aws.String("/")
 	}
+
+	var objects, totalBytes int64
 	req := svc.ListObjectsV2Request(input)
 	p := s3.NewListObjectsV2Paginator(req)
 	for p.Next(context.Background()) {
 		page := p.CurrentPage()
+		objects += int64(len(page.Contents))
 		// merge Contents and CommonPrefixes
 		contents := page.Contents
 		prefixes := page.CommonPrefixes
 		for len(contents) > 0 && len(prefixes) > 0 {
 			if aws.StringValue(contents[0].Key) < aws.StringValue(prefixes[0].Prefix) {
 				printObject(cmd, contents[0])
+				totalBytes += aws.Int64Value(contents[0].Size)
 				contents = contents[1:]
 			} else {
 				printPrefix(cmd, prefixes[0])
@@ -83,6 +89,7 @@ func listObjects(cmd *cobra.Command, svc s3iface.ClientAPI, path string) {
 		}
 		for _, obj := range contents {
 			printObject(cmd, obj)
+			totalBytes += aws.Int64Value(obj.Size)
 		}
 		for _, prefix := range prefixes {
 			printPrefix(cmd, prefix)
@@ -91,6 +98,15 @@ func listObjects(cmd *cobra.Command, svc s3iface.ClientAPI, path string) {
 	if err := p.Err(); err != nil {
 		cmd.PrintErrln(err)
 		os.Exit(1)
+	}
+
+	if summarize {
+		cmd.Printf("\nTotal Objects: %d\n", objects)
+		if humanReadable {
+			cmd.Printf("   Total Size: %s\n", makeHumanReadable(totalBytes))
+		} else {
+			cmd.Printf("   Total Size: %d\n", totalBytes)
+		}
 	}
 }
 
