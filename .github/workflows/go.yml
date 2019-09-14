@@ -13,7 +13,9 @@ jobs:
         - "4572:4572"
         env:
           SERVICES: s3
-        options: --workdir /opt/code/localstack
+        # Enable health check to ensure startup,
+        # And override the working directory, because the GitHub Actions changes it unintentionally.
+        options: --health-cmd="/usr/bin/awslocal s3 ls" --workdir /opt/code/localstack
 
     steps:
 
