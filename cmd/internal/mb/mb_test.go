@@ -11,8 +11,8 @@ import (
 )
 
 func TestMB(t *testing.T) {
-	if err := config.SetupTest(); err != nil {
-		t.Skip(err)
+	if err := config.SetupTest(t); err != nil {
+		return
 	}
 
 	svc, err := config.NewS3Client()

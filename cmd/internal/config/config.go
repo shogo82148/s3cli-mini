@@ -1,12 +1,10 @@
 package config
 
 import (
-	"context"
 	"errors"
-	"net/http"
 	"os"
 	"sync"
-	"time"
+	"testing"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/aws/defaults"
@@ -69,42 +67,13 @@ func NewS3Client() (s3iface.ClientAPI, error) {
 }
 
 // SetupTest sets aws configure for tests.
-func SetupTest() error {
-	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
-	defer cancel()
-
-	if err := setupTestConfig(); err != nil {
-		return err
-	}
-
-	// Wait until the service is ready
-	endpoint := os.Getenv("S3MINI_TEST_ENDPOINT")
-	for {
-		req, err := http.NewRequest(http.MethodGet, endpoint, nil)
-		if err != nil {
-			return err
-		}
-		req = req.WithContext(ctx)
-		resp, err := http.DefaultClient.Do(req)
-		if err == nil {
-			resp.Body.Close()
-			return nil
-		}
-
-		select {
-		case <-time.After(time.Second):
-		case <-ctx.Done():
-			return ctx.Err()
-		}
-	}
-}
-
-func setupTestConfig() error {
+func SetupTest(t *testing.T) error {
 	mu.Lock()
 	defer mu.Unlock()
 
 	endpoint := os.Getenv("S3MINI_TEST_ENDPOINT")
 	if endpoint == "" {
+		t.Skip("this test needs S3MINI_TEST_ENDPOINT environment value")
 		return errors.New("S3MINI_TEST_ENDPOINT is not set")
 	}
 
