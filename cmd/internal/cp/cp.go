@@ -19,11 +19,13 @@ import (
 	"github.com/shogo82148/s3cli-mini/cmd/internal/config"
 	"github.com/shogo82148/s3cli-mini/internal/fastwalk"
 	"github.com/spf13/cobra"
+	"golang.org/x/sync/errgroup"
 )
 
 // maximum object size in a single atomic operation. (5GiB)
 // https://docs.aws.amazon.com/AmazonS3/latest/dev/CopyingObjectsExamples.html
-const maxCopyObjectBytes = 5 * 1024 * 1024 * 1024
+// It is a variable, because of tests.
+var maxCopyObjectBytes = int64(5 * 1024 * 1024 * 1024)
 
 // chunk size for multipart copying objects
 const copyChunkBytes = 5 * 1024 * 1024
@@ -528,6 +530,96 @@ func (c *client) s3s3(src, dist string) error {
 		c.cmd.PrintErrf("copy s3://%s/%s to s3://%s/%s\n", srcBucket, srcKey, distBucket, distKey)
 	} else {
 		// https://docs.aws.amazon.com/AmazonS3/latest/dev/CopyingObjctsMPUapi.html
+		size := aws.Int64Value(resp.ContentLength)
+		resp, err := c.s3.CreateMultipartUploadRequest(&s3.CreateMultipartUploadInput{
+			Bucket: aws.String(distBucket),
+			Key:    aws.String(distKey),
+		}).Send(c.ctx)
+		uploadID := resp.UploadId
+		if err != nil {
+			return err
+		}
+
+		// watch incomplete upload
+		success := make(chan struct{}) // the size of the channel must be zero to avoid unexpected aborting
+		var wg sync.WaitGroup
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			select {
+			case <-success:
+				return
+			case <-c.ctx.Done():
+			}
+			ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+			defer cancel()
+			c.s3.AbortMultipartUploadRequest(&s3.AbortMultipartUploadInput{
+				Bucket:   aws.String(distBucket),
+				Key:      aws.String(distKey),
+				UploadId: uploadID,
+			}).Send(ctx)
+		}()
+
+		// upload parts
+		g, ctx := errgroup.WithContext(c.ctx)
+		parts := make([]s3.CompletedPart, int((size+copyChunkBytes-1)/copyChunkBytes))
+		sem := make(chan struct{}, parallel)
+	UPLOAD:
+		for i, pos := int64(1), int64(0); pos < size; i, pos = i+1, pos+copyChunkBytes {
+			i, pos := i, pos
+			lastByte := pos + copyChunkBytes - 1
+			if lastByte >= size {
+				lastByte = size - 1
+			}
+			select {
+			case sem <- struct{}{}:
+			case <-ctx.Done():
+				break UPLOAD
+			}
+			g.Go(func() error {
+				defer func() {
+					<-sem
+				}()
+				resp, err := c.s3.UploadPartCopyRequest(&s3.UploadPartCopyInput{
+					Bucket:          aws.String(distBucket),
+					Key:             aws.String(distKey),
+					CopySource:      aws.String(srcBucket + "/" + srcKey),
+					CopySourceRange: aws.String(fmt.Sprintf("%d-%d", pos, lastByte)),
+					UploadId:        uploadID,
+					PartNumber:      aws.Int64(i),
+				}).Send(ctx)
+				if err != nil {
+					return err
+				}
+				parts[i-1] = s3.CompletedPart{
+					ETag:       resp.CopyPartResult.ETag,
+					PartNumber: aws.Int64(i),
+				}
+				return nil
+			})
+		}
+		if err := g.Wait(); err != nil {
+			c.cancel()
+			wg.Wait()
+			return err
+		}
+
+		// complete
+		_, err = c.s3.CompleteMultipartUploadRequest(&s3.CompleteMultipartUploadInput{
+			Bucket:   aws.String(distBucket),
+			Key:      aws.String(distKey),
+			UploadId: uploadID,
+			MultipartUpload: &s3.CompletedMultipartUpload{
+				Parts: parts,
+			},
+		}).Send(c.ctx)
+		if err != nil {
+			return err
+		}
+
+		// notify success via channel
+		success <- struct{}{}
+		wg.Wait()
 	}
 	return nil
 }
