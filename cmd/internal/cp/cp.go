@@ -527,7 +527,6 @@ func (c *client) s3s3(src, dist string) error {
 		if err != nil {
 			return err
 		}
-		c.cmd.PrintErrf("copy s3://%s/%s to s3://%s/%s\n", srcBucket, srcKey, distBucket, distKey)
 	} else {
 		// https://docs.aws.amazon.com/AmazonS3/latest/dev/CopyingObjctsMPUapi.html
 		size := aws.Int64Value(resp.ContentLength)
@@ -535,10 +534,10 @@ func (c *client) s3s3(src, dist string) error {
 			Bucket: aws.String(distBucket),
 			Key:    aws.String(distKey),
 		}).Send(c.ctx)
-		uploadID := resp.UploadId
 		if err != nil {
 			return err
 		}
+		uploadID := resp.UploadId
 
 		// watch incomplete upload
 		success := make(chan struct{})
@@ -623,11 +622,216 @@ func (c *client) s3s3(src, dist string) error {
 		close(success)
 		wg.Wait()
 	}
+	c.cmd.PrintErrf("copy s3://%s/%s to s3://%s/%s\n", srcBucket, srcKey, distBucket, distKey)
 	return nil
 }
 
 func (c *client) s3s3recursive(src, dist string) error {
-	return nil
+	srcBucket, srcKey := parsePath(src)
+	distBucket, distKey := parsePath(dist)
+	if srcKey != "" && srcKey[len(srcKey)-1] != '/' {
+		srcKey += "/"
+	}
+	type result struct {
+		message string
+		err     error
+	}
+	var wg sync.WaitGroup
+	chSource := make(chan string, parallel)
+	chResult := make(chan result, parallel)
+
+	// walk s3
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		defer close(chSource)
+		req := c.s3.ListObjectsV2Request(&s3.ListObjectsV2Input{
+			Bucket: aws.String(srcBucket),
+			Prefix: aws.String(srcKey),
+		})
+		p := s3.NewListObjectsV2Paginator(req)
+		for p.Next(c.ctx) {
+			page := p.CurrentPage()
+			for _, obj := range page.Contents {
+				select {
+				case chSource <- aws.StringValue(obj.Key):
+				case <-c.ctx.Done():
+					return
+				}
+			}
+		}
+		if err := p.Err(); err != nil {
+			select {
+			case chResult <- result{err: err}:
+			case <-c.ctx.Done():
+				return
+			}
+		}
+	}()
+
+	doCopy := func(p string) (string, error) {
+		distKey := path.Join(distKey, strings.TrimPrefix(p, srcKey))
+		resp, err := c.s3.HeadObjectRequest(&s3.HeadObjectInput{
+			Bucket: aws.String(srcBucket),
+			Key:    aws.String(p),
+		}).Send(c.ctx)
+		if err != nil {
+			return "", err
+		}
+		if aws.Int64Value(resp.ContentLength) <= maxCopyObjectBytes {
+			// https://docs.aws.amazon.com/AmazonS3/latest/dev/CopyingObjectsUsingAPIs.html
+			_, err := c.s3.CopyObjectRequest(&s3.CopyObjectInput{
+				Bucket:     aws.String(distBucket),
+				Key:        aws.String(distKey),
+				CopySource: aws.String(srcBucket + "/" + p),
+			}).Send(c.ctx)
+			if err != nil {
+				return "", err
+			}
+		} else {
+			// https://docs.aws.amazon.com/AmazonS3/latest/dev/CopyingObjctsMPUapi.html
+			size := aws.Int64Value(resp.ContentLength)
+			resp, err := c.s3.CreateMultipartUploadRequest(&s3.CreateMultipartUploadInput{
+				Bucket: aws.String(distBucket),
+				Key:    aws.String(distKey),
+			}).Send(c.ctx)
+			if err != nil {
+				return "", err
+			}
+			uploadID := resp.UploadId
+
+			// watch incomplete upload
+			success := make(chan struct{})
+			var wg sync.WaitGroup
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				select {
+				case <-success:
+					return
+				case <-c.ctx.Done():
+				}
+				ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+				defer cancel()
+				c.s3.AbortMultipartUploadRequest(&s3.AbortMultipartUploadInput{
+					Bucket:   aws.String(distBucket),
+					Key:      aws.String(distKey),
+					UploadId: uploadID,
+				}).Send(ctx)
+			}()
+
+			// upload parts
+			g, ctx := errgroup.WithContext(c.ctx)
+			parts := make([]s3.CompletedPart, int((size+copyChunkBytes-1)/copyChunkBytes))
+			sem := make(chan struct{}, parallel)
+		UPLOAD:
+			for i, pos := int64(1), int64(0); pos < size; i, pos = i+1, pos+copyChunkBytes {
+				i, pos := i, pos
+				lastByte := pos + copyChunkBytes - 1
+				if lastByte >= size {
+					lastByte = size - 1
+				}
+				select {
+				case sem <- struct{}{}:
+				case <-ctx.Done():
+					break UPLOAD
+				}
+				g.Go(func() error {
+					defer func() {
+						<-sem
+					}()
+					resp, err := c.s3.UploadPartCopyRequest(&s3.UploadPartCopyInput{
+						Bucket:          aws.String(distBucket),
+						Key:             aws.String(distKey),
+						CopySource:      aws.String(srcBucket + "/" + srcKey),
+						CopySourceRange: aws.String(fmt.Sprintf("%d-%d", pos, lastByte)),
+						UploadId:        uploadID,
+						PartNumber:      aws.Int64(i),
+					}).Send(ctx)
+					if err != nil {
+						return err
+					}
+					parts[i-1] = s3.CompletedPart{
+						ETag:       resp.CopyPartResult.ETag,
+						PartNumber: aws.Int64(i),
+					}
+					return nil
+				})
+			}
+			if err := g.Wait(); err != nil {
+				c.cancel()
+				wg.Wait()
+				return "", err
+			}
+
+			// complete
+			_, err = c.s3.CompleteMultipartUploadRequest(&s3.CompleteMultipartUploadInput{
+				Bucket:   aws.String(distBucket),
+				Key:      aws.String(distKey),
+				UploadId: uploadID,
+				MultipartUpload: &s3.CompletedMultipartUpload{
+					Parts: parts,
+				},
+			}).Send(c.ctx)
+			if err != nil {
+				c.cancel()
+				wg.Wait()
+				return "", err
+			}
+
+			// notify success via channel
+			close(success)
+			wg.Wait()
+		}
+		return fmt.Sprintf("copy s3://%s/%s to s3://%s/%s", srcBucket, p, distBucket, distKey), nil
+	}
+	wg.Add(parallel)
+	for i := 0; i < parallel; i++ {
+		go func() {
+			defer wg.Done()
+			for {
+				var key string
+				var ok bool
+				select {
+				case key, ok = <-chSource:
+					if !ok {
+						return
+					}
+				case <-c.ctx.Done():
+					return
+				}
+				msg, err := doCopy(key)
+				if err != nil {
+					select {
+					case chResult <- result{err: err}:
+					case <-c.ctx.Done():
+						return
+					}
+				}
+				select {
+				case chResult <- result{message: msg}:
+				case <-c.ctx.Done():
+					return
+				}
+			}
+		}()
+	}
+	go func() {
+		wg.Wait()
+		close(chResult)
+	}()
+
+	var err error
+	for ret := range chResult {
+		if ret.err != nil {
+			c.cmd.PrintErrln("Copy error: ", ret.err)
+			err = ret.err
+			c.cancel()
+		} else {
+			c.cmd.PrintErrln(ret.message)
+		}
+	}
+	return err
 }
 
 func parsePath(path string) (bucket, key string) {

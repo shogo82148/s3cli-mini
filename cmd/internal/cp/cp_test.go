@@ -506,3 +506,101 @@ func TestCP_CopyMultipart(t *testing.T) {
 		Key:    aws.String("tmpfile.copy"),
 	}).Send(ctx)
 }
+
+func TestCP_CopyRecursive(t *testing.T) {
+	if err := config.SetupTest(t); err != nil {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	svc, err := config.NewS3Client()
+	if err != nil {
+		t.Fatal(err)
+	}
+	cleanup, err := prepareEmptyBucket(ctx, svc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cleanup()
+
+	// prepare test files
+	content := []byte("temporary file's content")
+	dir, err := ioutil.TempDir("", "s3cli-mini")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(dir)
+	keys := []string{
+		"a.txt",
+		"foo.zip",
+		"foo/bar/.baz/a",
+		"foo/bar/.baz/b",
+		"foo/bar/.baz/c",
+		"foo/bar/.baz/d",
+		"foo/bar/.baz/e",
+		"foo/bar/.baz/hooks/bar",
+		"foo/bar/.baz/hooks/foo",
+		"z.txt",
+	}
+	for _, key := range keys {
+		_, err := svc.PutObjectRequest(&s3.PutObjectInput{
+			Body:   bytes.NewReader(content),
+			Bucket: aws.String(bucketName),
+			Key:    aws.String(key),
+		}).Send(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// test
+	original := maxCopyObjectBytes
+	originalParallel := parallel
+	parallel = 1
+	maxCopyObjectBytes = 5 * 1024 * 1024
+	recursive = true
+	defer func() {
+		recursive = false
+		maxCopyObjectBytes = original
+		parallel = originalParallel
+	}()
+	cmd := &cobra.Command{}
+	Run(cmd, []string{"s3://" + bucketName + "/foo", "s3://" + bucketName + "/fizz"})
+
+	// check body
+	expected := []string{
+		"fizz/bar/.baz/a",
+		"fizz/bar/.baz/b",
+		"fizz/bar/.baz/c",
+		"fizz/bar/.baz/d",
+		"fizz/bar/.baz/e",
+		"fizz/bar/.baz/hooks/bar",
+		"fizz/bar/.baz/hooks/foo",
+	}
+	for _, key := range expected {
+		resp, err := svc.GetObjectRequest(&s3.GetObjectInput{
+			Bucket: aws.String(bucketName),
+			Key:    aws.String(key),
+		}).Send(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		body, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		if string(body) != string(content) {
+			t.Errorf("want %s, got %s", string(content), string(body))
+		}
+	}
+
+	// cleanup
+	for _, key := range keys {
+		svc.DeleteObjectRequest(&s3.DeleteObjectInput{
+			Bucket: aws.String(bucketName),
+			Key:    aws.String(key),
+		}).Send(ctx)
+	}
+}
