@@ -151,15 +151,19 @@ func (c *client) locals3(src, dist string) error {
 		key += filepath.Base(src)
 	}
 
-	resp, err := c.uploader.UploadWithContext(c.ctx, &s3manager.UploadInput{
-		Body:   f,
-		Bucket: aws.String(bucket),
-		Key:    aws.String(key),
-	})
-	if err != nil {
-		return err
+	if !dryrun {
+		resp, err := c.uploader.UploadWithContext(c.ctx, &s3manager.UploadInput{
+			Body:   f,
+			Bucket: aws.String(bucket),
+			Key:    aws.String(key),
+		})
+		if err != nil {
+			return err
+		}
+		c.cmd.PrintErrf("upload %s to %s\n", src, resp.Location)
+	} else {
+		c.cmd.PrintErrf("upload %s to s3://%s/%s\n", src, bucket, key)
 	}
-	c.cmd.PrintErrf("upload %s to %s\n", src, resp.Location)
 	return nil
 }
 
