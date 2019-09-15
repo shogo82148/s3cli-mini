@@ -2,7 +2,6 @@ package cp
 
 import (
 	"context"
-	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -44,42 +43,6 @@ type client struct {
 	s3         s3iface.ClientAPI
 	uploader   s3manageriface.UploaderAPI
 	downloader s3manageriface.DownloaderAPI
-}
-
-type source interface {
-	Name() string
-}
-
-type s3source interface {
-	source
-}
-
-type localSource interface {
-	source
-	Open() (io.ReadCloser, error)
-}
-
-var _ localSource = (*localFileSource)(nil)
-
-type localFileSource struct {
-	name string
-}
-
-func (s *localFileSource) Open() (io.ReadCloser, error) {
-	return os.Open(s.name)
-}
-
-func (s *localFileSource) Name() string {
-	return s.name
-}
-
-type result struct {
-	message string
-	err     error
-}
-
-type sourceHandler interface {
-	HandleSource(c *client, s source) (string, error)
 }
 
 // Run runs cp command.
