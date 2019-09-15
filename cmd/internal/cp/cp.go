@@ -247,7 +247,7 @@ func (c *client) locals3recursive(src, dist string) error {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		close(chSource)
+		defer close(chSource)
 		if err := fastwalk.Walk(src, func(path string, typ os.FileMode) error {
 			info, err := os.Stat(path)
 			if err != nil {
