@@ -434,6 +434,9 @@ func (c *client) s3localrecursive(src, dist string) error {
 	// download workers
 	download := func(p string) (string, error) {
 		distPath := filepath.Join(dist, filepath.FromSlash(strings.TrimPrefix(p, key)))
+		if dryrun {
+			return fmt.Sprintf("download s3://%s/%s to %s", bucket, p, distPath), nil
+		}
 		dir, _ := filepath.Split(distPath)
 		if err := os.MkdirAll(dir, 0755); err != nil {
 			return "", err
@@ -508,6 +511,10 @@ func (c *client) s3s3(src, dist string) error {
 	distBucket, distKey := parsePath(dist)
 	if distKey == "" || distKey[len(distKey)-1] == '/' {
 		distKey += path.Base(srcKey)
+	}
+	if dryrun {
+		c.cmd.PrintErrf("copy s3://%s/%s to s3://%s/%s\n", srcBucket, srcKey, distBucket, distKey)
+		return nil
 	}
 
 	resp, err := c.s3.HeadObjectRequest(&s3.HeadObjectInput{
@@ -671,6 +678,9 @@ func (c *client) s3s3recursive(src, dist string) error {
 
 	doCopy := func(p string) (string, error) {
 		distKey := path.Join(distKey, strings.TrimPrefix(p, srcKey))
+		if dryrun {
+			return fmt.Sprintf("copy s3://%s/%s to s3://%s/%s", srcBucket, p, distBucket, distKey), nil
+		}
 		resp, err := c.s3.HeadObjectRequest(&s3.HeadObjectInput{
 			Bucket: aws.String(srcBucket),
 			Key:    aws.String(p),
