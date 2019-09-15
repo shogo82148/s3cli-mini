@@ -609,4 +609,10 @@ func TestCP_CopyRecursive(t *testing.T) {
 			Key:    aws.String(key),
 		}).Send(ctx)
 	}
+	for _, key := range expected {
+		svc.DeleteObjectRequest(&s3.DeleteObjectInput{
+			Bucket: aws.String(bucketName),
+			Key:    aws.String(key),
+		}).Send(ctx)
+	}
 }
