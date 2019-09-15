@@ -4,6 +4,7 @@ import (
 	"context"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -146,6 +147,10 @@ func (c *client) locals3(src, dist string) error {
 	}
 	defer f.Close()
 
+	if key == "" || key[len(key)-1] == '/' {
+		key += filepath.Base(src)
+	}
+
 	resp, err := c.uploader.UploadWithContext(c.ctx, &s3manager.UploadInput{
 		Body:   f,
 		Bucket: aws.String(bucket),
@@ -154,7 +159,7 @@ func (c *client) locals3(src, dist string) error {
 	if err != nil {
 		return err
 	}
-	c.cmd.PrintErrf("Upload %s to %s\n", src, resp.Location)
+	c.cmd.PrintErrf("upload %s to %s\n", src, resp.Location)
 	return nil
 }
 
