@@ -54,7 +54,7 @@ release-linux-amd64:
 	@$(MAKE) release-targz GOOS=linux GOARCH=amd64
 
 release-darwin-amd64:
-	@$(MAKE) release-zip GOOS=darwin GOARCH=amd64
+	@$(MAKE) release-targz GOOS=darwin GOARCH=amd64
 
 release-targz: build $(RELEASE_DIR)/s3cli-mini_$(GOOS)_$(GOARCH)
 	@echo " * Creating tar.gz for $(GOOS)/$(GOARCH)"
