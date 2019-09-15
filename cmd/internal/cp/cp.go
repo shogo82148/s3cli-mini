@@ -541,7 +541,7 @@ func (c *client) s3s3(src, dist string) error {
 		}
 
 		// watch incomplete upload
-		success := make(chan struct{}) // the size of the channel must be zero to avoid unexpected aborting
+		success := make(chan struct{})
 		var wg sync.WaitGroup
 		wg.Add(1)
 		go func() {
@@ -614,11 +614,13 @@ func (c *client) s3s3(src, dist string) error {
 			},
 		}).Send(c.ctx)
 		if err != nil {
+			c.cancel()
+			wg.Wait()
 			return err
 		}
 
 		// notify success via channel
-		success <- struct{}{}
+		close(success)
 		wg.Wait()
 	}
 	return nil
