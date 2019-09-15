@@ -3,15 +3,16 @@ package cp
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"strings"
 	"sync"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3/s3iface"
 	"github.com/aws/aws-sdk-go-v2/service/s3/s3manager"
 	"github.com/aws/aws-sdk-go-v2/service/s3/s3manager/s3manageriface"
-	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/shogo82148/s3cli-mini/cmd/internal/config"
 	"github.com/spf13/cobra"
 )
@@ -47,7 +48,9 @@ type client struct {
 	downloader s3manageriface.DownloaderAPI
 }
 
-type source interface{}
+type source interface {
+	Name() string
+}
 
 type s3source interface {
 	source
@@ -58,12 +61,18 @@ type localSource interface {
 	Open() (io.ReadCloser, error)
 }
 
+var _ localSource = (*localFileSource)(nil)
+
 type localFileSource struct {
 	name string
 }
 
 func (s *localFileSource) Open() (io.ReadCloser, error) {
 	return os.Open(s.name)
+}
+
+func (s *localFileSource) Name() string {
+	return s.name
 }
 
 type result struct {
@@ -167,7 +176,7 @@ func (c *client) handleSource(s source, dist string) (string, error) {
 	case localSource:
 		r, err := s.Open()
 		if err != nil {
-			return "", err
+			return "", fmt.Errorf("upload failed: %w", err)
 		}
 		resp, err := c.uploader.UploadWithContext(c.ctx, &s3manager.UploadInput{
 			Body:   r,
@@ -175,14 +184,14 @@ func (c *client) handleSource(s source, dist string) (string, error) {
 			Key:    aws.String(key),
 		})
 		if err != nil {
-			return "", err
+			return "", fmt.Errorf("upload failed: %w", err)
 		}
 		r.Close()
-		return "upload: to " + resp.Location, nil
+		return fmt.Sprintf("upload: %s to %s", s.Name(), resp.Location), nil
 	case s3source:
 		return "TODO", nil
 	}
-	return "", errors.New("type missmatch")
+	return "", errors.New("upload failed: type missmatch")
 }
 
 func parsePath(path string) (bucket, key string) {
