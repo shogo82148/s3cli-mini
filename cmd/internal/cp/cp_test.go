@@ -246,3 +246,86 @@ func TestCP_UploadPublicACL(t *testing.T) {
 		Key:    aws.String("tmpfile"),
 	}).Send(ctx)
 }
+
+func TestCP_Upload_recursive(t *testing.T) {
+	if err := config.SetupTest(t); err != nil {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	svc, err := config.NewS3Client()
+	if err != nil {
+		t.Fatal(err)
+	}
+	cleanup, err := prepareEmptyBucket(ctx, svc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cleanup()
+
+	// prepare test files
+	content := []byte("temporary file's content")
+	dir, err := ioutil.TempDir("", "s3cli-mini")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(dir)
+	keys := []string{
+		"a.txt",
+		"foo.zip",
+		"foo/bar/.baz/a",
+		"foo/bar/.baz/b",
+		"foo/bar/.baz/c",
+		"foo/bar/.baz/d",
+		"foo/bar/.baz/e",
+		"foo/bar/.baz/hooks/bar",
+		"foo/bar/.baz/hooks/foo",
+		"z.txt",
+	}
+	for _, key := range keys {
+		filename := filepath.Join(dir, filepath.FromSlash(key))
+		dir, _ := filepath.Split(filename)
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err := ioutil.WriteFile(filename, content, 0666); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// test
+	recursive = true
+	defer func() {
+		recursive = false
+	}()
+	cmd := &cobra.Command{}
+	Run(cmd, []string{dir, "s3://" + bucketName})
+
+	// check body
+	for _, key := range keys {
+		resp, err := svc.GetObjectRequest(&s3.GetObjectInput{
+			Bucket: aws.String(bucketName),
+			Key:    aws.String(key),
+		}).Send(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		body, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		if string(body) != string(content) {
+			t.Errorf("want %s, got %s", string(content), string(body))
+		}
+	}
+
+	// cleanup
+	for _, key := range keys {
+		svc.DeleteObjectRequest(&s3.DeleteObjectInput{
+			Bucket: aws.String(bucketName),
+			Key:    aws.String(key),
+		}).Send(ctx)
+	}
+}
