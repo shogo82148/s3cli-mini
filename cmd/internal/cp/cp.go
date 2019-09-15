@@ -135,30 +135,29 @@ func (c *client) Run(src, dist string) {
 
 func (c *client) locals3(src, dist string) error {
 	bucket, key := parsePath(dist)
+	if key == "" || key[len(key)-1] == '/' {
+		key += filepath.Base(src)
+	}
+	if dryrun {
+		c.cmd.PrintErrf("upload %s to s3://%s/%s\n", src, bucket, key)
+	}
+
 	f, err := os.Open(src)
 	if err != nil {
 		return err
 	}
 	defer f.Close()
 
-	if key == "" || key[len(key)-1] == '/' {
-		key += filepath.Base(src)
+	_, err = c.uploader.UploadWithContext(c.ctx, &s3manager.UploadInput{
+		Body:   f,
+		Bucket: aws.String(bucket),
+		Key:    aws.String(key),
+		ACL:    c.acl,
+	})
+	if err != nil {
+		return err
 	}
-
-	if !dryrun {
-		resp, err := c.uploader.UploadWithContext(c.ctx, &s3manager.UploadInput{
-			Body:   f,
-			Bucket: aws.String(bucket),
-			Key:    aws.String(key),
-			ACL:    c.acl,
-		})
-		if err != nil {
-			return err
-		}
-		c.cmd.PrintErrf("upload %s to %s\n", src, resp.Location)
-	} else {
-		c.cmd.PrintErrf("upload %s to s3://%s/%s\n", src, bucket, key)
-	}
+	c.cmd.PrintErrf("upload %s to s3://%s/%s\n", src, bucket, key)
 	return nil
 }
 
