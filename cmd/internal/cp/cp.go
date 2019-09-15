@@ -141,19 +141,42 @@ func (c *client) Run(src, dist string) {
 	s3dist := strings.HasPrefix(dist, "s3://")
 	dist = strings.TrimPrefix(dist, "s3://")
 
-	switch {
-	case s3src && s3dist:
-		c.s3s3(src, dist)
-		return
-	case !s3src && s3dist:
-		if err := c.locals3(src, dist); err != nil {
-			c.cmd.PrintErrln("Upload error: ", err)
-			os.Exit(1)
+	if recursive {
+		switch {
+		case s3src && s3dist:
+			c.s3s3(src, dist)
+			return
+		case !s3src && s3dist:
+			if err := c.locals3recursive(src, dist); err != nil {
+				c.cmd.PrintErrln("Upload error: ", err)
+				os.Exit(1)
+			}
+			return
+		case s3src && !s3dist:
+			if err := c.s3localrecursive(src, dist); err != nil {
+				c.cmd.PrintErrln("Download error: ", err)
+				os.Exit(1)
+			}
+			return
 		}
-		return
-	case s3src && !s3dist:
-		c.s3local(src, dist)
-		return
+	} else {
+		switch {
+		case s3src && s3dist:
+			c.s3s3(src, dist)
+			return
+		case !s3src && s3dist:
+			if err := c.locals3(src, dist); err != nil {
+				c.cmd.PrintErrln("Upload error: ", err)
+				os.Exit(1)
+			}
+			return
+		case s3src && !s3dist:
+			if err := c.s3local(src, dist); err != nil {
+				c.cmd.PrintErrln("Download error: ", err)
+				os.Exit(1)
+			}
+			return
+		}
 	}
 
 	c.cmd.PrintErrln("Error: Invalid argument type")
@@ -161,9 +184,6 @@ func (c *client) Run(src, dist string) {
 }
 
 func (c *client) locals3(src, dist string) error {
-	if recursive {
-		return c.locals3recursive(src, dist)
-	}
 	bucket, key := parsePath(dist)
 	if key == "" || key[len(key)-1] == '/' {
 		key += filepath.Base(src)
@@ -209,7 +229,10 @@ func (c *client) locals3recursive(src, dist string) error {
 	chResult := make(chan result, parallel)
 
 	// walk local file system
+	wg.Add(1)
 	go func() {
+		defer wg.Done()
+		close(chSource)
 		if err := fastwalk.Walk(src, func(path string, typ os.FileMode) error {
 			info, err := os.Stat(path)
 			if err != nil {
@@ -228,9 +251,11 @@ func (c *client) locals3recursive(src, dist string) error {
 			}
 			return nil
 		}); err != nil {
-			return
+			select {
+			case chResult <- result{err: err}:
+			case <-c.ctx.Done():
+			}
 		}
-		close(chSource)
 	}()
 
 	// upload workers
@@ -304,19 +329,20 @@ func (c *client) locals3recursive(src, dist string) error {
 		close(chResult)
 	}()
 
+	var err error
 	for ret := range chResult {
 		if ret.err != nil {
 			c.cmd.PrintErrln("Upload error: ", ret.err)
+			err = ret.err
 			c.cancel()
 		} else {
 			c.cmd.PrintErrln(ret.message)
 		}
 	}
-
-	return nil
+	return err
 }
 
-func (c *client) s3local(src, dist string) {
+func (c *client) s3local(src, dist string) error {
 	bucket, key := parsePath(src)
 	if key == "" || key[len(key)-1] == '/' {
 		c.cmd.PrintErrln("Error: Invalid argument type")
@@ -327,30 +353,148 @@ func (c *client) s3local(src, dist string) {
 	}
 	if dryrun {
 		c.cmd.PrintErrf("download s3://%s/%s to %s\n", bucket, key, dist)
-		return
+		return nil
 	}
 
 	f, err := os.OpenFile(dist, os.O_CREATE|os.O_RDWR|os.O_TRUNC, 0644)
 	if err != nil {
-		c.cmd.PrintErrln("Download Error: ", err)
-		os.Exit(1)
+		return err
 	}
 	_, err = c.downloader.DownloadWithContext(c.ctx, f, &s3.GetObjectInput{
 		Bucket: aws.String(bucket),
 		Key:    aws.String(key),
 	})
 	if err != nil {
-		c.cmd.PrintErrln("Download Error: ", err)
-		os.Exit(1)
+		return err
 	}
 	if err := f.Close(); err != nil {
-		c.cmd.PrintErrln("Download Error: ", err)
-		os.Exit(1)
+		return err
 	}
 	c.cmd.PrintErrf("download s3://%s/%s to %s\n", bucket, key, dist)
+	return nil
 }
 
-func (c *client) s3s3(src, dist string) {}
+func (c *client) s3localrecursive(src, dist string) error {
+	bucket, key := parsePath(src)
+	if key != "" && key[len(key)-1] != '/' {
+		key += "/"
+	}
+	type result struct {
+		message string
+		err     error
+	}
+	var wg sync.WaitGroup
+	chSource := make(chan string, parallel)
+	chResult := make(chan result, parallel)
+
+	// walk s3
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		defer close(chSource)
+		req := c.s3.ListObjectsV2Request(&s3.ListObjectsV2Input{
+			Bucket: aws.String(bucket),
+			Prefix: aws.String(key),
+		})
+		p := s3.NewListObjectsV2Paginator(req)
+		for p.Next(c.ctx) {
+			page := p.CurrentPage()
+			for _, obj := range page.Contents {
+				select {
+				case chSource <- aws.StringValue(obj.Key):
+				case <-c.ctx.Done():
+					return
+				}
+			}
+		}
+		if err := p.Err(); err != nil {
+			select {
+			case chResult <- result{err: err}:
+			case <-c.ctx.Done():
+				return
+			}
+		}
+	}()
+
+	// download workers
+	download := func(p string) (string, error) {
+		distPath := filepath.Join(dist, filepath.FromSlash(strings.TrimPrefix(p, key)))
+		dir, _ := filepath.Split(distPath)
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			return "", err
+		}
+		f, err := os.OpenFile(distPath, os.O_CREATE|os.O_RDWR|os.O_TRUNC, 0644)
+		if err != nil {
+			return "", err
+		}
+		_, err = c.downloader.DownloadWithContext(c.ctx, f, &s3.GetObjectInput{
+			Bucket: aws.String(bucket),
+			Key:    aws.String(p),
+		})
+		if err != nil {
+			return "", err
+		}
+		if err := f.Close(); err != nil {
+			return "", err
+		}
+		return fmt.Sprintf("download s3://%s/%s to %s", bucket, p, distPath), nil
+	}
+	wg.Add(parallel)
+	for i := 0; i < parallel; i++ {
+		go func() {
+			defer wg.Done()
+			for {
+				var key string
+				var ok bool
+				select {
+				case key, ok = <-chSource:
+					if !ok {
+						return
+					}
+				case <-c.ctx.Done():
+					return
+				}
+				msg, err := download(key)
+				if err != nil {
+					select {
+					case chResult <- result{err: err}:
+					case <-c.ctx.Done():
+						return
+					}
+				}
+				select {
+				case chResult <- result{message: msg}:
+				case <-c.ctx.Done():
+					return
+				}
+			}
+		}()
+	}
+	go func() {
+		wg.Wait()
+		close(chResult)
+	}()
+
+	var err error
+	for ret := range chResult {
+		if ret.err != nil {
+			c.cmd.PrintErrln("Download error: ", ret.err)
+			err = ret.err
+			c.cancel()
+		} else {
+			c.cmd.PrintErrln(ret.message)
+		}
+	}
+	return err
+}
+
+func (c *client) s3s3(src, dist string) error {
+	return nil
+}
+
+func (c *client) s3s3recursive(src, dist string) error {
+	return nil
+}
 
 func parsePath(path string) (bucket, key string) {
 	path = strings.TrimPrefix(path, "s3://")
