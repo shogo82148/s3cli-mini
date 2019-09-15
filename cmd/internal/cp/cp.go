@@ -21,6 +21,13 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// maximum object size in a single atomic operation. (5GiB)
+// https://docs.aws.amazon.com/AmazonS3/latest/dev/CopyingObjectsExamples.html
+const maxCopyObjectBytes = 5 * 1024 * 1024 * 1024
+
+// chunk size for multipart copying objects
+const copyChunkBytes = 5 * 1024 * 1024
+
 var dryrun bool
 var parallel int
 var includes []string
@@ -144,7 +151,10 @@ func (c *client) Run(src, dist string) {
 	if recursive {
 		switch {
 		case s3src && s3dist:
-			c.s3s3(src, dist)
+			if err := c.s3s3recursive(src, dist); err != nil {
+				c.cmd.PrintErrln("Copy error: ", err)
+				os.Exit(1)
+			}
 			return
 		case !s3src && s3dist:
 			if err := c.locals3recursive(src, dist); err != nil {
@@ -162,7 +172,10 @@ func (c *client) Run(src, dist string) {
 	} else {
 		switch {
 		case s3src && s3dist:
-			c.s3s3(src, dist)
+			if err := c.s3s3(src, dist); err != nil {
+				c.cmd.PrintErrln("Copy error: ", err)
+				os.Exit(1)
+			}
 			return
 		case !s3src && s3dist:
 			if err := c.locals3(src, dist); err != nil {
@@ -489,6 +502,33 @@ func (c *client) s3localrecursive(src, dist string) error {
 }
 
 func (c *client) s3s3(src, dist string) error {
+	srcBucket, srcKey := parsePath(src)
+	distBucket, distKey := parsePath(dist)
+	if distKey == "" || distKey[len(distKey)-1] == '/' {
+		distKey += path.Base(srcKey)
+	}
+
+	resp, err := c.s3.HeadObjectRequest(&s3.HeadObjectInput{
+		Bucket: aws.String(srcBucket),
+		Key:    aws.String(srcKey),
+	}).Send(c.ctx)
+	if err != nil {
+		return err
+	}
+	if aws.Int64Value(resp.ContentLength) <= maxCopyObjectBytes {
+		// https://docs.aws.amazon.com/AmazonS3/latest/dev/CopyingObjectsUsingAPIs.html
+		_, err := c.s3.CopyObjectRequest(&s3.CopyObjectInput{
+			Bucket:     aws.String(distBucket),
+			Key:        aws.String(distKey),
+			CopySource: aws.String(srcBucket + "/" + srcKey),
+		}).Send(c.ctx)
+		if err != nil {
+			return err
+		}
+		c.cmd.PrintErrf("copy s3://%s/%s to s3://%s/%s\n", srcBucket, srcKey, distBucket, distKey)
+	} else {
+		// https://docs.aws.amazon.com/AmazonS3/latest/dev/CopyingObjctsMPUapi.html
+	}
 	return nil
 }
 
