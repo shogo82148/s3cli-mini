@@ -297,8 +297,11 @@ func TestCP_Upload_recursive(t *testing.T) {
 
 	// test
 	recursive = true
+	originalParallel := parallel
+	parallel = 1
 	defer func() {
 		recursive = false
+		parallel = originalParallel
 	}()
 	cmd := &cobra.Command{}
 	Run(cmd, []string{dir, "s3://" + bucketName})
