@@ -476,8 +476,11 @@ func TestCP_CopyMultipart(t *testing.T) {
 
 	original := maxCopyObjectBytes
 	maxCopyObjectBytes = 5 * 1024 * 1024
+	originalParallel := parallel
+	parallel = 1
 	defer func() {
 		maxCopyObjectBytes = original
+		parallel = originalParallel
 	}()
 	cmd := &cobra.Command{}
 	Run(cmd, []string{"s3://" + bucketName + "/tmpfile", "s3://" + bucketName + "/tmpfile.copy"})
