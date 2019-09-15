@@ -2,11 +2,13 @@ package cp
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/s3/s3iface"
 	"github.com/aws/aws-sdk-go-v2/service/s3/s3manager"
 	"github.com/aws/aws-sdk-go-v2/service/s3/s3manager/s3manageriface"
@@ -20,7 +22,7 @@ var includes []string
 var excludes []string
 var acl string
 var recursive bool
-var followSymlinks bool
+var followSymlinks = true
 var noFollowSymlinks bool
 var noGuessMimeType bool
 
@@ -37,12 +39,14 @@ func Init(cmd *cobra.Command) {
 }
 
 type client struct {
-	ctx        context.Context
-	cancel     context.CancelFunc
-	cmd        *cobra.Command
-	s3         s3iface.ClientAPI
-	uploader   s3manageriface.UploaderAPI
-	downloader s3manageriface.DownloaderAPI
+	ctx            context.Context
+	cancel         context.CancelFunc
+	cmd            *cobra.Command
+	s3             s3iface.ClientAPI
+	uploader       s3manageriface.UploaderAPI
+	downloader     s3manageriface.DownloaderAPI
+	followSymlinks bool
+	acl            s3.ObjectCannedACL
 }
 
 // Run runs cp command.
@@ -54,7 +58,6 @@ func Run(cmd *cobra.Command, args []string) {
 		cmd.Usage()
 		return
 	}
-	followSymlinks = followSymlinks && !noFollowSymlinks
 
 	svc, err := config.NewS3Client()
 	if err != nil {
@@ -70,7 +73,35 @@ func Run(cmd *cobra.Command, args []string) {
 		uploader:   s3manager.NewUploaderWithClient(svc),
 		downloader: s3manager.NewDownloaderWithClient(svc),
 	}
+	c.followSymlinks = followSymlinks && !noFollowSymlinks
+	c.acl, err = parseACL(acl)
+	if err != nil {
+		c.cmd.PrintErrln("Validation error: ", err)
+		os.Exit(1)
+	}
 	c.Run(args[0], args[1])
+}
+
+func parseACL(acl string) (s3.ObjectCannedACL, error) {
+	switch acl {
+	case "":
+		return "", nil
+	case "private":
+		return s3.ObjectCannedACLPrivate, nil
+	case "public-read":
+		return s3.ObjectCannedACLPublicRead, nil
+	case "public-read-write":
+		return s3.ObjectCannedACLPublicReadWrite, nil
+	case "authenticated-read":
+		return s3.ObjectCannedACLAuthenticatedRead, nil
+	case "aws-exec-read":
+		return s3.ObjectCannedACLAwsExecRead, nil
+	case "bucket-owner-read":
+		return s3.ObjectCannedACLBucketOwnerRead, nil
+	case "bucket-owner-full-control":
+		return s3.ObjectCannedACLBucketOwnerFullControl, nil
+	}
+	return "", fmt.Errorf("unknown acl: %s", acl)
 }
 
 func (c *client) Run(src, dist string) {
@@ -119,6 +150,7 @@ func (c *client) locals3(src, dist string) error {
 			Body:   f,
 			Bucket: aws.String(bucket),
 			Key:    aws.String(key),
+			ACL:    c.acl,
 		})
 		if err != nil {
 			return err
