@@ -316,7 +316,39 @@ func (c *client) locals3recursive(src, dist string) error {
 	return nil
 }
 
-func (c *client) s3local(src, dist string) {}
+func (c *client) s3local(src, dist string) {
+	bucket, key := parsePath(src)
+	if key == "" || key[len(key)-1] == '/' {
+		c.cmd.PrintErrln("Error: Invalid argument type")
+		os.Exit(1)
+	}
+	if info, err := os.Stat(dist); err == nil && info.IsDir() {
+		dist = filepath.Join(dist, path.Base(key))
+	}
+	if dryrun {
+		c.cmd.PrintErrf("download s3://%s/%s to %s\n", bucket, key, dist)
+		return
+	}
+
+	f, err := os.OpenFile(dist, os.O_CREATE|os.O_RDWR|os.O_TRUNC, 0644)
+	if err != nil {
+		c.cmd.PrintErrln("Download Error: ", err)
+		os.Exit(1)
+	}
+	_, err = c.downloader.DownloadWithContext(c.ctx, f, &s3.GetObjectInput{
+		Bucket: aws.String(bucket),
+		Key:    aws.String(key),
+	})
+	if err != nil {
+		c.cmd.PrintErrln("Download Error: ", err)
+		os.Exit(1)
+	}
+	if err := f.Close(); err != nil {
+		c.cmd.PrintErrln("Download Error: ", err)
+		os.Exit(1)
+	}
+	c.cmd.PrintErrf("download s3://%s/%s to %s\n", bucket, key, dist)
+}
 
 func (c *client) s3s3(src, dist string) {}
 

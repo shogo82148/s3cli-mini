@@ -1,6 +1,7 @@
 package cp
 
 import (
+	"bytes"
 	"context"
 	"io/ioutil"
 	"os"
@@ -106,7 +107,7 @@ func TestCP_Upload(t *testing.T) {
 	// cleanup
 	svc.DeleteObjectRequest(&s3.DeleteObjectInput{
 		Bucket: aws.String(bucketName),
-		Key:    aws.String("tmpfile"),
+		Key:    aws.String("tmpfile.html"),
 	}).Send(ctx)
 }
 
@@ -328,4 +329,57 @@ func TestCP_Upload_recursive(t *testing.T) {
 			Key:    aws.String(key),
 		}).Send(ctx)
 	}
+}
+
+func TestCP_Download(t *testing.T) {
+	if err := config.SetupTest(t); err != nil {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	svc, err := config.NewS3Client()
+	if err != nil {
+		t.Fatal(err)
+	}
+	cleanup, err := prepareEmptyBucket(ctx, svc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cleanup()
+
+	// prepare a test object
+	content := []byte("temporary file's content")
+	_, err = svc.PutObjectRequest(&s3.PutObjectInput{
+		Body:   bytes.NewReader(content),
+		Bucket: aws.String(bucketName),
+		Key:    aws.String("tmpfile"),
+	}).Send(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// test
+	dir, err := ioutil.TempDir("", "s3cli-mini")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(dir)
+	filename := filepath.Join(dir, "tmpfile")
+	cmd := &cobra.Command{}
+	Run(cmd, []string{"s3://" + bucketName + "/tmpfile", filename})
+
+	got, err := ioutil.ReadFile(filename)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != string(content) {
+		t.Errorf("want %s, got %s", string(content), string(got))
+	}
+
+	// cleanup
+	svc.DeleteObjectRequest(&s3.DeleteObjectInput{
+		Bucket: aws.String(bucketName),
+		Key:    aws.String("tmpfile"),
+	}).Send(ctx)
 }
