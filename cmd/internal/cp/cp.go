@@ -2,12 +2,9 @@ package cp
 
 import (
 	"context"
-	"errors"
-	"fmt"
 	"io"
 	"os"
 	"strings"
-	"sync"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3/s3iface"
@@ -80,6 +77,10 @@ type result struct {
 	err     error
 }
 
+type sourceHandler interface {
+	HandleSource(c *client, s source) (string, error)
+}
+
 // Run runs cp command.
 func Run(cmd *cobra.Command, args []string) {
 	ctx, cancel := context.WithCancel(context.Background())
@@ -112,87 +113,54 @@ func (c *client) Run(src, dist string) {
 	if parallel <= 0 {
 		parallel = 1
 	}
-	chSource := make(chan source, parallel)
-	go c.parseSource(src, chSource)
 
-	ret := make(chan result, parallel)
-	var wg sync.WaitGroup
-	wg.Add(parallel)
-	for i := 0; i < parallel; i++ {
-		go func() {
-			defer wg.Done()
-			c.runWorker(ret, chSource, dist)
-		}()
-	}
-	go func() {
-		wg.Wait()
-		close(ret)
-	}()
+	s3src := strings.HasPrefix(src, "s3://")
+	src = strings.TrimPrefix(src, "s3://")
+	s3dist := strings.HasPrefix(dist, "s3://")
+	dist = strings.TrimPrefix(dist, "s3://")
 
-	for r := range ret {
-		if r.err != nil {
-			c.cmd.PrintErrln("Error: ", r.err)
-			c.cancel()
+	switch {
+	case s3src && s3dist:
+		c.s3s3(src, dist)
+		return
+	case !s3src && s3dist:
+		if err := c.locals3(src, dist); err != nil {
+			c.cmd.PrintErrln("Upload error: ", err)
+			os.Exit(1)
 		}
-		c.cmd.PrintErrln(r.message)
+		return
+	case s3src && !s3dist:
+		c.s3local(src, dist)
+		return
 	}
+
+	c.cmd.PrintErrln("Error: Invalid argument type")
+	os.Exit(1)
 }
 
-func (c *client) parseSource(src string, ch chan<- source) {
-	ch <- &localFileSource{name: src}
-	close(ch)
-}
-
-func (c *client) runWorker(ret chan<- result, src <-chan source, dist string) {
-	for {
-		var s source
-		var ok bool
-		select {
-		case s, ok = <-src:
-			if !ok {
-				return
-			}
-		case <-c.ctx.Done():
-			return
-		}
-		message, err := c.handleSource(s, dist)
-		if err != nil {
-			select {
-			case ret <- result{err: err}:
-			case <-c.ctx.Done():
-			}
-			return
-		}
-		select {
-		case ret <- result{message: message}:
-		case <-c.ctx.Done():
-		}
-	}
-}
-
-func (c *client) handleSource(s source, dist string) (string, error) {
+func (c *client) locals3(src, dist string) error {
 	bucket, key := parsePath(dist)
-	switch s := s.(type) {
-	case localSource:
-		r, err := s.Open()
-		if err != nil {
-			return "", fmt.Errorf("upload failed: %w", err)
-		}
-		resp, err := c.uploader.UploadWithContext(c.ctx, &s3manager.UploadInput{
-			Body:   r,
-			Bucket: aws.String(bucket),
-			Key:    aws.String(key),
-		})
-		if err != nil {
-			return "", fmt.Errorf("upload failed: %w", err)
-		}
-		r.Close()
-		return fmt.Sprintf("upload: %s to %s", s.Name(), resp.Location), nil
-	case s3source:
-		return "TODO", nil
+	f, err := os.Open(src)
+	if err != nil {
+		return err
 	}
-	return "", errors.New("upload failed: type missmatch")
+	defer f.Close()
+
+	resp, err := c.uploader.UploadWithContext(c.ctx, &s3manager.UploadInput{
+		Body:   f,
+		Bucket: aws.String(bucket),
+		Key:    aws.String(key),
+	})
+	if err != nil {
+		return err
+	}
+	c.cmd.PrintErrf("Upload %s to %s\n", src, resp.Location)
+	return nil
 }
+
+func (c *client) s3local(src, dist string) {}
+
+func (c *client) s3s3(src, dist string) {}
 
 func parsePath(path string) (bucket, key string) {
 	path = strings.TrimPrefix(path, "s3://")
