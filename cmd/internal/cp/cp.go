@@ -3,9 +3,11 @@ package cp
 import (
 	"context"
 	"fmt"
+	"mime"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
@@ -25,17 +27,30 @@ var recursive bool
 var followSymlinks = true
 var noFollowSymlinks bool
 var noGuessMimeType bool
+var contentType string
+var cacheControl string
+var contentDisposition string
+var contentEncoding string
+var contentLanguage string
+var expires string
 
 // Init initializes flags.
 func Init(cmd *cobra.Command) {
-	cmd.Flags().BoolVar(&dryrun, "dryrun", false, "Displays the operations that would be performed using the specified command without actually running them.")
-	cmd.Flags().StringArrayVar(&includes, "include", []string{}, "Don't exclude files or objects in the command that match the specified pattern. See Use of Exclude and Include Filters for details.")
-	cmd.Flags().StringArrayVar(&excludes, "exclude", []string{}, "Exclude all files or objects from the command that matches the specified pattern.")
-	cmd.Flags().StringVar(&acl, "acl", "", "Sets the ACL for the object when the command is performed.")
-	cmd.Flags().BoolVar(&recursive, "recursive", false, "Command is performed on all files or objects under the specified directory or prefix.")
-	cmd.Flags().BoolVar(&followSymlinks, "follow-symlinks", true, "Symbolic links are followed only when uploading to S3 from the local filesystem.")
-	cmd.Flags().BoolVar(&noFollowSymlinks, "no-follow-symlinks", false, "")
-	cmd.Flags().BoolVar(&noGuessMimeType, "no-guess-mime-type", false, "Do not try to guess the mime type for uploaded files. By default the mime type of a file is guessed when it is uploaded.")
+	flags := cmd.Flags()
+	flags.BoolVar(&dryrun, "dryrun", false, "Displays the operations that would be performed using the specified command without actually running them.")
+	flags.StringArrayVar(&includes, "include", []string{}, "Don't exclude files or objects in the command that match the specified pattern. See Use of Exclude and Include Filters for details.")
+	flags.StringArrayVar(&excludes, "exclude", []string{}, "Exclude all files or objects from the command that matches the specified pattern.")
+	flags.StringVar(&acl, "acl", "", "Sets the ACL for the object when the command is performed.")
+	flags.BoolVar(&recursive, "recursive", false, "Command is performed on all files or objects under the specified directory or prefix.")
+	flags.BoolVar(&followSymlinks, "follow-symlinks", true, "Symbolic links are followed only when uploading to S3 from the local filesystem.")
+	flags.BoolVar(&noFollowSymlinks, "no-follow-symlinks", false, "")
+	flags.BoolVar(&noGuessMimeType, "no-guess-mime-type", false, "Do not try to guess the mime type for uploaded files. By default the mime type of a file is guessed when it is uploaded.")
+	flags.StringVar(&contentType, "content-type", "", "Specify an explicit content type for this operation. This value overrides any guessed mime types.")
+	flags.StringVar(&cacheControl, "cache-control", "", "Specifies caching behavior along the request/reply chain.")
+	flags.StringVar(&cacheControl, "content-disposition", "", "Specifies presentational information for the object.")
+	flags.StringVar(&contentEncoding, "content-encoding", "", "Specifies what content encodings have been applied to the object and thus what decoding mechanisms must be applied to obtain the media-type referenced by the Content-Type header field.")
+	flags.StringVar(&contentLanguage, "content-language", "", "The language the content is in.")
+	flags.StringVar(&expires, "expires", "", "The date and time at which the object is no longer cacheable.")
 }
 
 type client struct {
@@ -47,6 +62,7 @@ type client struct {
 	downloader     s3manageriface.DownloaderAPI
 	followSymlinks bool
 	acl            s3.ObjectCannedACL
+	expires        *time.Time
 }
 
 // Run runs cp command.
@@ -78,6 +94,14 @@ func Run(cmd *cobra.Command, args []string) {
 	if err != nil {
 		c.cmd.PrintErrln("Validation error: ", err)
 		os.Exit(1)
+	}
+	if expires != "" {
+		t, err := time.Parse(time.RFC3339, expires)
+		if err != nil {
+			c.cmd.PrintErrln("Validation error: ", err)
+			os.Exit(1)
+		}
+		c.expires = &t
 	}
 	c.Run(args[0], args[1])
 }
@@ -148,12 +172,19 @@ func (c *client) locals3(src, dist string) error {
 	}
 	defer f.Close()
 
-	_, err = c.uploader.UploadWithContext(c.ctx, &s3manager.UploadInput{
-		Body:   f,
-		Bucket: aws.String(bucket),
-		Key:    aws.String(key),
-		ACL:    c.acl,
-	})
+	input := &s3manager.UploadInput{
+		Body:               f,
+		Bucket:             aws.String(bucket),
+		Key:                aws.String(key),
+		ACL:                c.acl,
+		ContentType:        getContentType(key),
+		CacheControl:       nullableString(cacheControl),
+		ContentDisposition: nullableString(contentDisposition),
+		ContentEncoding:    nullableString(contentEncoding),
+		ContentLanguage:    nullableString(contentLanguage),
+		Expires:            c.expires,
+	}
+	_, err = c.uploader.UploadWithContext(c.ctx, input)
 	if err != nil {
 		return err
 	}
@@ -174,4 +205,30 @@ func parsePath(path string) (bucket, key string) {
 	}
 	bucket = path
 	return
+}
+
+func nullableString(s string) *string {
+	if s == "" {
+		return nil
+	}
+	return &s
+}
+
+func getContentType(path string) *string {
+	if contentType != "" {
+		return aws.String(contentType)
+	}
+	if noGuessMimeType {
+		return aws.String("application/octet-stream")
+	}
+
+	// guess content type
+	var t string
+	if idx := strings.LastIndex(path, "."); idx >= 0 {
+		t = mime.TypeByExtension(path[idx:])
+	}
+	if t == "" {
+		t = "application/octet-stream"
+	}
+	return aws.String(t)
 }

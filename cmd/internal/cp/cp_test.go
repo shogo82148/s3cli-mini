@@ -66,11 +66,11 @@ func TestCP_Upload(t *testing.T) {
 
 	// test
 	cmd := &cobra.Command{}
-	Run(cmd, []string{filename, "s3://" + bucketName + "/tmpfile"})
+	Run(cmd, []string{filename, "s3://" + bucketName + "/tmpfile.html"})
 
 	resp, err := svc.GetObjectRequest(&s3.GetObjectInput{
 		Bucket: aws.String(bucketName),
-		Key:    aws.String("tmpfile"),
+		Key:    aws.String("tmpfile.html"),
 	}).Send(ctx)
 	if err != nil {
 		t.Fatal(err)
@@ -85,11 +85,14 @@ func TestCP_Upload(t *testing.T) {
 	if string(body) != string(content) {
 		t.Errorf("want %s, got %s", string(content), string(body))
 	}
+	if aws.StringValue(resp.ContentType) != "text/html; charset=utf-8" {
+		t.Errorf("unexpected content-type: want %s, got %s", "text/html; charset-utf-8", aws.StringValue(resp.ContentType))
+	}
 
 	// check acl
 	retACL, err := svc.GetObjectAclRequest(&s3.GetObjectAclInput{
 		Bucket: aws.String(bucketName),
-		Key:    aws.String("tmpfile"),
+		Key:    aws.String("tmpfile.html"),
 	}).Send(ctx)
 	if err != nil {
 		t.Fatal(err)
