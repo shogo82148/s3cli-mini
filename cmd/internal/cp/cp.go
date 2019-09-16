@@ -83,7 +83,7 @@ func Run(cmd *cobra.Command, args []string) {
 	defer cancel()
 
 	if len(args) != 2 {
-		cmd.Usage()
+		cmd.Usage() // test of reviewdog
 		return
 	}
 
