@@ -51,7 +51,7 @@ func LoadAWSConfig() (aws.Config, error) {
 	// Load default config
 	cfg, err := external.LoadDefaultAWSConfig(configs...)
 	if err != nil {
-		return aws.Config{}, nil
+		return aws.Config{}, err
 	}
 
 	if debug {
