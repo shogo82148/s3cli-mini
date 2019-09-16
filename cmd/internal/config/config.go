@@ -93,18 +93,18 @@ func NewS3ServiceClient() (s3iface.ClientAPI, error) {
 	if err != nil {
 		return nil, err
 	}
-	if awsRegion == "" {
+	if cfg.Region == "" {
 		cfg.Region = "us-east-1"
-	}
-	if endpointURL == "" {
-		cfg.EndpointResolver = aws.EndpointResolverFunc(func(service, region string) (aws.Endpoint, error) {
-			if service == "s3" {
-				return aws.Endpoint{
-					URL: "https://s3.amazonaws.com",
-				}, nil
-			}
-			return aws.Endpoint{}, errors.New("unknown service")
-		})
+		if endpointURL == "" {
+			cfg.EndpointResolver = aws.EndpointResolverFunc(func(service, region string) (aws.Endpoint, error) {
+				if service == "s3" {
+					return aws.Endpoint{
+						URL: "https://s3.amazonaws.com",
+					}, nil
+				}
+				return aws.Endpoint{}, errors.New("unknown service")
+			})
+		}
 	}
 	svc := s3.New(cfg)
 	svc.ForcePathStyle = true
