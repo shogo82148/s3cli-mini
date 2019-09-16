@@ -83,7 +83,10 @@ func Run(cmd *cobra.Command, args []string) {
 	defer cancel()
 
 	if len(args) != 2 {
-		cmd.Usage()
+		if err := cmd.Usage(); err != nil {
+			cmd.PrintErrln("error: ", err)
+			os.Exit(1)
+		}
 		return
 	}
 
