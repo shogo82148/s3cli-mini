@@ -28,7 +28,7 @@ func Init(cmd *cobra.Command) {
 
 // Run runs mb command.
 func Run(cmd *cobra.Command, args []string) {
-	svc, err := config.NewS3Client()
+	svc, err := config.NewS3ServiceClient()
 	if err != nil {
 		cmd.PrintErrln(err)
 		os.Exit(1)

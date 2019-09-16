@@ -86,13 +86,38 @@ func NewS3Client() (s3iface.ClientAPI, error) {
 	return svc, nil
 }
 
+// NewS3ServiceClient returns new S3 client that is used for getting s3 service level operation, such as ListBucket
+// https://docs.aws.amazon.com/AmazonS3/latest/API/RESTServiceGET.html
+func NewS3ServiceClient() (s3iface.ClientAPI, error) {
+	cfg, err := LoadAWSConfig()
+	if err != nil {
+		return nil, err
+	}
+	if awsRegion == "" {
+		cfg.Region = "us-east-1"
+	}
+	if endpointURL == "" {
+		cfg.EndpointResolver = aws.EndpointResolverFunc(func(service, region string) (aws.Endpoint, error) {
+			if service == "s3" {
+				return aws.Endpoint{
+					URL: "https://s3.amazonaws.com",
+				}, nil
+			}
+			return aws.Endpoint{}, errors.New("unknown service")
+		})
+	}
+	svc := s3.New(cfg)
+	svc.ForcePathStyle = true
+	return svc, nil
+}
+
 // SetupTest sets aws configure for tests.
 func SetupTest(t *testing.T) error {
 	mu.Lock()
 	defer mu.Unlock()
 
-	endpoint := os.Getenv("S3MINI_TEST_ENDPOINT")
-	if endpoint == "" {
+	endpointURL = os.Getenv("S3MINI_TEST_ENDPOINT")
+	if endpointURL == "" {
 		t.Skip("this test needs S3MINI_TEST_ENDPOINT environment value")
 		return errors.New("S3MINI_TEST_ENDPOINT is not set")
 	}
@@ -102,7 +127,7 @@ func SetupTest(t *testing.T) error {
 	cfg.EndpointResolver = aws.EndpointResolverFunc(func(service, region string) (aws.Endpoint, error) {
 		if service == "s3" {
 			return aws.Endpoint{
-				URL: endpoint,
+				URL: endpointURL,
 			}, nil
 		}
 		return aws.Endpoint{}, errors.New("unknown service")
