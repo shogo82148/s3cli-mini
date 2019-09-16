@@ -20,6 +20,7 @@ var awsConfigLoaded bool
 var awsConfig aws.Config
 var awsRegion string
 var awsProfile string
+var endpointURL string
 var inTest bool
 
 // InitFlag initializes global configure.
@@ -28,6 +29,7 @@ func InitFlag(cmd *cobra.Command) {
 	flags.BoolVar(&debug, "debug", false, "Turn on debug logging.")
 	flags.StringVar(&awsRegion, "region", "", "The region to use. Overrides config/env settings.")
 	flags.StringVar(&awsProfile, "profile", "", "Use a specific profile from your credential file.")
+	flags.StringVar(&endpointURL, "endpoint-url", "", "UOverride command's default URL with the given URL.")
 }
 
 // LoadAWSConfig returns aws.Config.
@@ -54,6 +56,13 @@ func LoadAWSConfig() (aws.Config, error) {
 		return aws.Config{}, err
 	}
 
+	if endpointURL != "" {
+		cfg.EndpointResolver = aws.EndpointResolverFunc(func(service, region string) (aws.Endpoint, error) {
+			return aws.Endpoint{
+				URL: endpointURL,
+			}, nil
+		})
+	}
 	if debug {
 		cfg.LogLevel = aws.LogDebug
 	}
