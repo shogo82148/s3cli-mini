@@ -87,20 +87,12 @@ func Run(cmd *cobra.Command, args []string) {
 		return
 	}
 
-	svc, err := config.NewS3Client()
-	if err != nil {
-		cmd.PrintErrln(err)
-		os.Exit(1)
-	}
-
 	c := client{
-		ctx:        ctx,
-		cancel:     cancel,
-		cmd:        cmd,
-		s3:         svc,
-		uploader:   s3manager.NewUploaderWithClient(svc),
-		downloader: s3manager.NewDownloaderWithClient(svc),
+		ctx:    ctx,
+		cancel: cancel,
+		cmd:    cmd,
 	}
+	var err error
 	c.followSymlinks = followSymlinks && !noFollowSymlinks
 	c.acl, err = parseACL(acl)
 	if err != nil {
@@ -150,6 +142,26 @@ func (c *client) Run(src, dist string) {
 	s3dist := strings.HasPrefix(dist, "s3://")
 	dist = strings.TrimPrefix(dist, "s3://")
 
+	if s3src && s3dist {
+		c.cmd.PrintErrln("Error: Invalid argument type")
+		os.Exit(1)
+	}
+
+	var bucket string
+	if s3dist {
+		bucket, _ = parsePath(dist)
+	} else if s3src {
+		bucket, _ = parsePath(src)
+	}
+	svc, err := config.NewS3BucketClient(c.ctx, bucket)
+	if err != nil {
+		c.cmd.PrintErrln("Error: ", err)
+		os.Exit(1)
+	}
+	c.s3 = svc
+	c.uploader = s3manager.NewUploaderWithClient(svc)
+	c.downloader = s3manager.NewDownloaderWithClient(svc)
+
 	if recursive {
 		switch {
 		case s3src && s3dist:
@@ -194,8 +206,7 @@ func (c *client) Run(src, dist string) {
 		}
 	}
 
-	c.cmd.PrintErrln("Error: Invalid argument type")
-	os.Exit(1)
+	panic("will not reach")
 }
 
 func (c *client) locals3(src, dist string) error {

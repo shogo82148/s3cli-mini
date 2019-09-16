@@ -10,7 +10,6 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
-	"github.com/aws/aws-sdk-go-v2/service/s3/s3iface"
 	"github.com/shogo82148/s3cli-mini/cmd/internal/config"
 	"github.com/spf13/cobra"
 )
@@ -28,24 +27,26 @@ func Init(cmd *cobra.Command) {
 
 // Run runs mb command.
 func Run(cmd *cobra.Command, args []string) {
-	svc, err := config.NewS3ServiceClient()
-	if err != nil {
-		cmd.PrintErrln(err)
-		os.Exit(1)
-	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	if len(args) == 0 {
-		listBuckets(cmd, svc)
+		listBuckets(ctx, cmd)
 		return
 	}
 	if len(args) > 1 {
 		cmd.PrintErrln("extra options: " + strings.Join(args[1:], " "))
 		os.Exit(1)
 	}
-	listObjects(cmd, svc, args[0])
+	listObjects(ctx, cmd, args[0])
 }
 
-func listBuckets(cmd *cobra.Command, svc s3iface.ClientAPI) {
-	resp, err := svc.ListBucketsRequest(&s3.ListBucketsInput{}).Send(context.Background())
+func listBuckets(ctx context.Context, cmd *cobra.Command) {
+	svc, err := config.NewS3ServiceClient()
+	if err != nil {
+		cmd.PrintErrln(err)
+		os.Exit(1)
+	}
+	resp, err := svc.ListBucketsRequest(&s3.ListBucketsInput{}).Send(ctx)
 	if err != nil {
 		cmd.PrintErrln(err)
 		os.Exit(1)
@@ -56,8 +57,13 @@ func listBuckets(cmd *cobra.Command, svc s3iface.ClientAPI) {
 	}
 }
 
-func listObjects(cmd *cobra.Command, svc s3iface.ClientAPI, path string) {
+func listObjects(ctx context.Context, cmd *cobra.Command, path string) {
 	bucket, key := parsePath(path)
+	svc, err := config.NewS3BucketClient(ctx, bucket)
+	if err != nil {
+		cmd.PrintErrln(err)
+		os.Exit(1)
+	}
 	input := &s3.ListObjectsV2Input{
 		Bucket: aws.String(bucket),
 	}
@@ -71,7 +77,7 @@ func listObjects(cmd *cobra.Command, svc s3iface.ClientAPI, path string) {
 	var objects, totalBytes int64
 	req := svc.ListObjectsV2Request(input)
 	p := s3.NewListObjectsV2Paginator(req)
-	for p.Next(context.Background()) {
+	for p.Next(ctx) {
 		page := p.CurrentPage()
 		objects += int64(len(page.Contents))
 		// merge Contents and CommonPrefixes

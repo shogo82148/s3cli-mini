@@ -1,6 +1,7 @@
 package config
 
 import (
+	"context"
 	"errors"
 	"os"
 	"sync"
@@ -11,6 +12,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws/external"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/s3/s3iface"
+	"github.com/aws/aws-sdk-go-v2/service/s3/s3manager"
 	"github.com/spf13/cobra"
 )
 
@@ -79,9 +81,6 @@ func NewS3Client() (s3iface.ClientAPI, error) {
 		return nil, err
 	}
 	svc := s3.New(cfg)
-
-	mu.Lock()
-	defer mu.Unlock()
 	svc.ForcePathStyle = inTest
 	return svc, nil
 }
@@ -94,21 +93,48 @@ func NewS3ServiceClient() (s3iface.ClientAPI, error) {
 		return nil, err
 	}
 	if cfg.Region == "" {
+		// fall back to US East (N. Virginia)
 		cfg.Region = "us-east-1"
-		if endpointURL == "" {
-			cfg.EndpointResolver = aws.EndpointResolverFunc(func(service, region string) (aws.Endpoint, error) {
-				if service == "s3" {
-					return aws.Endpoint{
-						URL: "https://s3.amazonaws.com",
-					}, nil
-				}
-				return aws.Endpoint{}, errors.New("unknown service")
-			})
-		}
+	}
+	if endpointURL == "" {
+		cfg.EndpointResolver = aws.EndpointResolverFunc(defaultS3EndpointResolver)
 	}
 	svc := s3.New(cfg)
-	svc.ForcePathStyle = true
+	svc.ForcePathStyle = inTest
 	return svc, nil
+}
+
+// NewS3BucketClient returns new S3 client that is used for the bucket.
+func NewS3BucketClient(ctx context.Context, bucket string) (s3iface.ClientAPI, error) {
+	cfg, err := LoadAWSConfig()
+	if err != nil {
+		return nil, err
+	}
+	regionHint := cfg.Region
+	if regionHint == "" {
+		// fall back to US East (N. Virginia)
+		regionHint = "us-east-1"
+	}
+	region, err := s3manager.GetBucketRegion(ctx, cfg, bucket, regionHint)
+	if err != nil {
+		return nil, err
+	}
+	cfg.Region = region
+	if endpointURL == "" {
+		cfg.EndpointResolver = aws.EndpointResolverFunc(defaultS3EndpointResolver)
+	}
+	svc := s3.New(cfg)
+	svc.ForcePathStyle = inTest
+	return svc, nil
+}
+
+func defaultS3EndpointResolver(service, region string) (aws.Endpoint, error) {
+	if service == "s3" {
+		return aws.Endpoint{
+			URL: "https://s3.amazonaws.com",
+		}, nil
+	}
+	return aws.Endpoint{}, errors.New("unknown service")
 }
 
 // SetupTest sets aws configure for tests.
