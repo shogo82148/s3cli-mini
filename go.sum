@@ -9,6 +9,8 @@ github.com/aws/aws-sdk-go-v2 v0.11.0 h1:TMUl791B9lF/R8t3msh7id+mHxOXrQY6DAqLNEpr
 github.com/aws/aws-sdk-go-v2 v0.11.0/go.mod h1:cpXCmy3BB+lqwGweJjdawczHW3a+g8QgcFHcoOVoHao=
 github.com/aws/aws-sdk-go-v2 v0.15.0 h1:mQCV2MV4I0L02Nwi1xs0HM7yWbrcWjjUOy1UAv27sw8=
 github.com/aws/aws-sdk-go-v2 v0.15.0/go.mod h1:pFLIN9LDjOEwHfruGweAXEq0XaD6uRkY8FsRkxhuBIg=
+github.com/aws/aws-sdk-go-v2 v0.16.0 h1:X5pkFnjRNdDEX18NwDGWMaWL5ocNQX0qIYEhEcsTy64=
+github.com/aws/aws-sdk-go-v2 v0.16.0/go.mod h1:pFLIN9LDjOEwHfruGweAXEq0XaD6uRkY8FsRkxhuBIg=
 github.com/beorn7/perks v0.0.0-20180321164747-3a771d992973/go.mod h1:Dwedo/Wpr24TaqPxmxbtue+5NUziq4I4S80YR8gNf3Q=
 github.com/beorn7/perks v1.0.0/go.mod h1:KWe93zE9D1o94FZ5RNwFwVgaQK1VOXiVxmqh+CedLV8=
 github.com/cespare/xxhash v1.1.0/go.mod h1:XrSqR1VqqWfGrhpAt58auRo0WTKS1nRRg3ghfAqPWnc=
