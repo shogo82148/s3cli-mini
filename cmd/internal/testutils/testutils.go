@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
-	"log"
 	"os"
 	"testing"
 
@@ -44,7 +43,6 @@ func CreateTemporaryBucket(ctx context.Context, svc s3iface.ClientAPI) (string, 
 
 // DeleteBucket deletes a S3 bucket.
 func DeleteBucket(ctx context.Context, svc s3iface.ClientAPI, bucketName string) error {
-	log.Println("deleting ", bucketName)
 	req := svc.ListObjectsV2Request(&s3.ListObjectsV2Input{
 		Bucket: aws.String(bucketName),
 	})
