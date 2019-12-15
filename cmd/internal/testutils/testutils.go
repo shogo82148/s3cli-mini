@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
@@ -38,6 +39,17 @@ func CreateTemporaryBucket(ctx context.Context, svc s3iface.ClientAPI) (string, 
 		return "", err
 	}
 
+	// wait for the bucket is visible
+	time.Sleep(time.Second)
+	for i := 0; i < 5; i++ {
+		_, err := svc.HeadBucketRequest(&s3.HeadBucketInput{
+			Bucket: aws.String(bucketName),
+		}).Send(ctx)
+		if err == nil {
+			return "", err
+		}
+		time.Sleep(time.Second)
+	}
 	return bucketName, nil
 }
 
