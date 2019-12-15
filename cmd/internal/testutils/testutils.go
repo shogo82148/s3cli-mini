@@ -46,7 +46,7 @@ func CreateTemporaryBucket(ctx context.Context, svc s3iface.ClientAPI) (string, 
 			Bucket: aws.String(bucketName),
 		}).Send(ctx)
 		if err == nil {
-			return "", err
+			return bucketName, nil
 		}
 		time.Sleep(time.Second)
 	}
