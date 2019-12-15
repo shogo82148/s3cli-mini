@@ -145,7 +145,7 @@ func (c *client) Run(src, dist string) {
 	s3dist := strings.HasPrefix(dist, "s3://")
 	dist = strings.TrimPrefix(dist, "s3://")
 
-	if s3src && s3dist {
+	if !s3src && !s3dist {
 		c.cmd.PrintErrln("Error: Invalid argument type")
 		os.Exit(1)
 	}
