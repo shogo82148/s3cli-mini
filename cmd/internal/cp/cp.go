@@ -218,7 +218,7 @@ func (c *client) locals3(src, dist string) error {
 		key += filepath.Base(src)
 	}
 	if dryrun {
-		c.cmd.PrintErrf("upload %s to s3://%s/%s\n", src, bucket, key)
+		c.cmd.PrintErrf("Upload %s to s3://%s/%s\n", src, bucket, key)
 		return nil
 	}
 
@@ -240,11 +240,11 @@ func (c *client) locals3(src, dist string) error {
 		ContentLanguage:    nullableString(contentLanguage),
 		Expires:            c.expires,
 	}
+	c.cmd.PrintErrf("Upload %s to s3://%s/%s\n", src, bucket, key)
 	_, err = c.uploader.UploadWithContext(c.ctx, input)
 	if err != nil {
 		return err
 	}
-	c.cmd.PrintErrf("upload %s to s3://%s/%s\n", src, bucket, key)
 	return nil
 }
 

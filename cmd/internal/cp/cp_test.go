@@ -11,35 +11,13 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
-	"github.com/aws/aws-sdk-go-v2/service/s3/s3iface"
 	"github.com/shogo82148/s3cli-mini/cmd/internal/config"
+	"github.com/shogo82148/s3cli-mini/cmd/internal/testutils"
 	"github.com/spf13/cobra"
 )
 
-const bucketName = "bucket-for-test"
-
-func prepareEmptyBucket(ctx context.Context, svc s3iface.ClientAPI) (cleanup func(), err error) {
-	// prepare a bucket for test
-	_, err = svc.CreateBucketRequest(&s3.CreateBucketInput{
-		Bucket: aws.String(bucketName),
-	}).Send(ctx)
-	if err != nil {
-		return
-	}
-
-	cleanup = func() {
-		// clean up
-		svc.DeleteBucketRequest(&s3.DeleteBucketInput{
-			Bucket: aws.String(bucketName),
-		}).Send(ctx)
-	}
-	return
-}
-
 func TestCP_Upload(t *testing.T) {
-	if err := config.SetupTest(t); err != nil {
-		return
-	}
+	testutils.SkipIfUnitTest(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
@@ -47,11 +25,11 @@ func TestCP_Upload(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	cleanup, err := prepareEmptyBucket(ctx, svc)
+	bucketName, err := testutils.CreateTemporaryBucket(ctx, svc)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer cleanup()
+	defer testutils.DeleteBucket(context.Background(), svc, bucketName)
 
 	// prepare a test file
 	content := []byte("temporary file's content")
@@ -103,18 +81,10 @@ func TestCP_Upload(t *testing.T) {
 			t.Errorf("unexpected grantee type, want %s, got %s", s3.TypeCanonicalUser, g.Grantee.Type)
 		}
 	}
-
-	// cleanup
-	svc.DeleteObjectRequest(&s3.DeleteObjectInput{
-		Bucket: aws.String(bucketName),
-		Key:    aws.String("tmpfile.html"),
-	}).Send(ctx)
 }
 
 func TestCP_Upload_KeyOmitted(t *testing.T) {
-	if err := config.SetupTest(t); err != nil {
-		return
-	}
+	testutils.SkipIfUnitTest(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
@@ -122,11 +92,11 @@ func TestCP_Upload_KeyOmitted(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	cleanup, err := prepareEmptyBucket(ctx, svc)
+	bucketName, err := testutils.CreateTemporaryBucket(ctx, svc)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer cleanup()
+	defer testutils.DeleteBucket(context.Background(), svc, bucketName)
 
 	// prepare a test file
 	content := []byte("temporary file's content")
@@ -159,18 +129,10 @@ func TestCP_Upload_KeyOmitted(t *testing.T) {
 	if string(body) != string(content) {
 		t.Errorf("want %s, got %s", string(content), string(body))
 	}
-
-	// cleanup
-	svc.DeleteObjectRequest(&s3.DeleteObjectInput{
-		Bucket: aws.String(bucketName),
-		Key:    aws.String("tmpfile"),
-	}).Send(ctx)
 }
 
 func TestCP_UploadPublicACL(t *testing.T) {
-	if err := config.SetupTest(t); err != nil {
-		return
-	}
+	testutils.SkipIfUnitTest(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
@@ -178,11 +140,11 @@ func TestCP_UploadPublicACL(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	cleanup, err := prepareEmptyBucket(ctx, svc)
+	bucketName, err := testutils.CreateTemporaryBucket(ctx, svc)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer cleanup()
+	defer testutils.DeleteBucket(context.Background(), svc, bucketName)
 
 	// prepare a test file
 	content := []byte("temporary file's content")
@@ -240,18 +202,10 @@ func TestCP_UploadPublicACL(t *testing.T) {
 	if !publicRead {
 		t.Error("unexpected acl: want public-read, but not")
 	}
-
-	// cleanup
-	svc.DeleteObjectRequest(&s3.DeleteObjectInput{
-		Bucket: aws.String(bucketName),
-		Key:    aws.String("tmpfile"),
-	}).Send(ctx)
 }
 
 func TestCP_Upload_recursive(t *testing.T) {
-	if err := config.SetupTest(t); err != nil {
-		return
-	}
+	testutils.SkipIfUnitTest(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
@@ -259,11 +213,11 @@ func TestCP_Upload_recursive(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	cleanup, err := prepareEmptyBucket(ctx, svc)
+	bucketName, err := testutils.CreateTemporaryBucket(ctx, svc)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer cleanup()
+	defer testutils.DeleteBucket(context.Background(), svc, bucketName)
 
 	// prepare test files
 	content := []byte("temporary file's content")
@@ -324,20 +278,10 @@ func TestCP_Upload_recursive(t *testing.T) {
 			t.Errorf("want %s, got %s", string(content), string(body))
 		}
 	}
-
-	// cleanup
-	for _, key := range keys {
-		svc.DeleteObjectRequest(&s3.DeleteObjectInput{
-			Bucket: aws.String(bucketName),
-			Key:    aws.String(key),
-		}).Send(ctx)
-	}
 }
 
 func TestCP_Download(t *testing.T) {
-	if err := config.SetupTest(t); err != nil {
-		return
-	}
+	testutils.SkipIfUnitTest(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
@@ -345,11 +289,11 @@ func TestCP_Download(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	cleanup, err := prepareEmptyBucket(ctx, svc)
+	bucketName, err := testutils.CreateTemporaryBucket(ctx, svc)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer cleanup()
+	defer testutils.DeleteBucket(context.Background(), svc, bucketName)
 
 	// prepare a test object
 	content := []byte("temporary file's content")
@@ -379,18 +323,10 @@ func TestCP_Download(t *testing.T) {
 	if string(got) != string(content) {
 		t.Errorf("want %s, got %s", string(content), string(got))
 	}
-
-	// cleanup
-	svc.DeleteObjectRequest(&s3.DeleteObjectInput{
-		Bucket: aws.String(bucketName),
-		Key:    aws.String("tmpfile"),
-	}).Send(ctx)
 }
 
 func TestCP_Copy(t *testing.T) {
-	if err := config.SetupTest(t); err != nil {
-		return
-	}
+	testutils.SkipIfUnitTest(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
@@ -398,11 +334,11 @@ func TestCP_Copy(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	cleanup, err := prepareEmptyBucket(ctx, svc)
+	bucketName, err := testutils.CreateTemporaryBucket(ctx, svc)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer cleanup()
+	defer testutils.DeleteBucket(context.Background(), svc, bucketName)
 
 	// prepare a test object
 	content := []byte("temporary file's content")
@@ -434,16 +370,6 @@ func TestCP_Copy(t *testing.T) {
 	if string(body) != string(content) {
 		t.Errorf("want %s, got %s", string(content), string(body))
 	}
-
-	// cleanup
-	svc.DeleteObjectRequest(&s3.DeleteObjectInput{
-		Bucket: aws.String(bucketName),
-		Key:    aws.String("tmpfile"),
-	}).Send(ctx)
-	svc.DeleteObjectRequest(&s3.DeleteObjectInput{
-		Bucket: aws.String(bucketName),
-		Key:    aws.String("tmpfile.copy"),
-	}).Send(ctx)
 }
 
 // func TestCP_CopyMultipart(t *testing.T) {
@@ -514,9 +440,7 @@ func TestCP_Copy(t *testing.T) {
 // }
 
 func TestCP_CopyRecursive(t *testing.T) {
-	if err := config.SetupTest(t); err != nil {
-		return
-	}
+	testutils.SkipIfUnitTest(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
@@ -524,11 +448,11 @@ func TestCP_CopyRecursive(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	cleanup, err := prepareEmptyBucket(ctx, svc)
+	bucketName, err := testutils.CreateTemporaryBucket(ctx, svc)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer cleanup()
+	defer testutils.DeleteBucket(context.Background(), svc, bucketName)
 
 	// prepare test files
 	content := []byte("temporary file's content")
@@ -600,19 +524,5 @@ func TestCP_CopyRecursive(t *testing.T) {
 		if string(body) != string(content) {
 			t.Errorf("want %s, got %s", string(content), string(body))
 		}
-	}
-
-	// cleanup
-	for _, key := range keys {
-		svc.DeleteObjectRequest(&s3.DeleteObjectInput{
-			Bucket: aws.String(bucketName),
-			Key:    aws.String(key),
-		}).Send(ctx)
-	}
-	for _, key := range expected {
-		svc.DeleteObjectRequest(&s3.DeleteObjectInput{
-			Bucket: aws.String(bucketName),
-			Key:    aws.String(key),
-		}).Send(ctx)
 	}
 }
