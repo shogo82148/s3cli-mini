@@ -1,3 +1,5 @@
+[![Coverage Status](https://coveralls.io/repos/github/shogo82148/s3cli-mini/badge.svg?branch=master)](https://coveralls.io/github/shogo82148/s3cli-mini?branch=master)
+
 # s3cli-mini
 Golang port for AWS Command Line Interface S3 subcommand.
 
