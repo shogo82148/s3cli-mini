@@ -2,13 +2,9 @@ package config
 
 import (
 	"context"
-	"errors"
-	"os"
 	"sync"
-	"testing"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/aws/defaults"
 	"github.com/aws/aws-sdk-go-v2/aws/external"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/s3/s3iface"
@@ -23,7 +19,6 @@ var awsConfig aws.Config
 var awsRegion string
 var awsProfile string
 var endpointURL string
-var inTest bool
 
 // InitFlag initializes global configure.
 func InitFlag(cmd *cobra.Command) {
@@ -81,7 +76,6 @@ func NewS3Client() (s3iface.ClientAPI, error) {
 		return nil, err
 	}
 	svc := s3.New(cfg)
-	svc.ForcePathStyle = inTest
 	return svc, nil
 }
 
@@ -96,11 +90,7 @@ func NewS3ServiceClient() (s3iface.ClientAPI, error) {
 		// fall back to US East (N. Virginia)
 		cfg.Region = "us-east-1"
 	}
-	if endpointURL == "" {
-		cfg.EndpointResolver = aws.EndpointResolverFunc(defaultS3EndpointResolver)
-	}
 	svc := s3.New(cfg)
-	svc.ForcePathStyle = inTest
 	return svc, nil
 }
 
@@ -120,50 +110,6 @@ func NewS3BucketClient(ctx context.Context, bucket string) (s3iface.ClientAPI, e
 		return nil, err
 	}
 	cfg.Region = region
-	if endpointURL == "" {
-		cfg.EndpointResolver = aws.EndpointResolverFunc(defaultS3EndpointResolver)
-	}
 	svc := s3.New(cfg)
-	svc.ForcePathStyle = inTest
 	return svc, nil
-}
-
-func defaultS3EndpointResolver(service, region string) (aws.Endpoint, error) {
-	if service == "s3" {
-		return aws.Endpoint{
-			URL: "https://s3.amazonaws.com",
-		}, nil
-	}
-	return aws.Endpoint{}, errors.New("unknown service")
-}
-
-// SetupTest sets aws configure for tests.
-func SetupTest(t *testing.T) error {
-	mu.Lock()
-	defer mu.Unlock()
-
-	endpointURL = os.Getenv("S3MINI_TEST_ENDPOINT")
-	if endpointURL == "" {
-		t.Skip("this test needs S3MINI_TEST_ENDPOINT environment value")
-		return errors.New("S3MINI_TEST_ENDPOINT is not set")
-	}
-
-	cfg := defaults.Config()
-	cfg.Region = "us-east-1"
-	cfg.EndpointResolver = aws.EndpointResolverFunc(func(service, region string) (aws.Endpoint, error) {
-		if service == "s3" {
-			return aws.Endpoint{
-				URL: endpointURL,
-			}, nil
-		}
-		return aws.Endpoint{}, errors.New("unknown service")
-	})
-
-	// Example Credentials
-	cfg.Credentials = aws.NewStaticCredentialsProvider("AKIAIOSFODNN7EXAMPLE", "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY", "")
-
-	awsConfig = cfg
-	awsConfigLoaded = true
-	inTest = true
-	return nil
 }

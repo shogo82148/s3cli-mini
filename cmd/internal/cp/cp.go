@@ -145,7 +145,7 @@ func (c *client) Run(src, dist string) {
 	s3dist := strings.HasPrefix(dist, "s3://")
 	dist = strings.TrimPrefix(dist, "s3://")
 
-	if s3src && s3dist {
+	if !s3src && !s3dist {
 		c.cmd.PrintErrln("Error: Invalid argument type")
 		os.Exit(1)
 	}
@@ -218,7 +218,7 @@ func (c *client) locals3(src, dist string) error {
 		key += filepath.Base(src)
 	}
 	if dryrun {
-		c.cmd.PrintErrf("upload %s to s3://%s/%s\n", src, bucket, key)
+		c.cmd.PrintErrf("Upload %s to s3://%s/%s\n", src, bucket, key)
 		return nil
 	}
 
@@ -240,11 +240,11 @@ func (c *client) locals3(src, dist string) error {
 		ContentLanguage:    nullableString(contentLanguage),
 		Expires:            c.expires,
 	}
+	c.cmd.PrintErrf("Upload %s to s3://%s/%s\n", src, bucket, key)
 	_, err = c.uploader.UploadWithContext(c.ctx, input)
 	if err != nil {
 		return err
 	}
-	c.cmd.PrintErrf("upload %s to s3://%s/%s\n", src, bucket, key)
 	return nil
 }
 

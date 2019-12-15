@@ -1,0 +1,61 @@
+name: test
+on: [push, pull_request]
+
+jobs:
+
+  test:
+
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - macos-latest
+          - windows-latest
+    
+    runs-on: ${{ matrix.os }}
+    steps:
+
+      - name: Set up Go
+        uses: actions/setup-go@v1
+        with:
+          go-version: "1.13"
+
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@v1
+
+      - uses: actions/cache@v1
+        with:
+          path: ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+
+      - name: Test
+        run: |
+          make test
+        env:
+          GO111MODULE: "on"
+          S3CLI_TEST_BUCKET_PREFIX: "shogo82148-s3cli-test-"
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION: us-east-1
+          AWS_DEFAULT_REGION: us-east-1
+
+      - name: Send coverage
+        uses: shogo82148/actions-goveralls@v1
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path-to-profile: profile.cov
+          parallel: true
+          job-number: ${{ strategy.job-index }}
+
+  # notifies that all test jobs are finished.
+  finish:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: shogo82148/actions-goveralls@v1
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          parallel-finished: true
