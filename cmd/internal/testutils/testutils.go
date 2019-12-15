@@ -53,7 +53,7 @@ func DeleteBucket(ctx context.Context, svc s3iface.ClientAPI, bucketName string)
 			svc.DeleteObjectRequest(&s3.DeleteObjectInput{
 				Bucket: aws.String(bucketName),
 				Key:    obj.Key,
-			})
+			}).Send(ctx)
 		}
 	}
 	if err := p.Err(); err != nil {
