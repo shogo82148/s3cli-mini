@@ -251,11 +251,8 @@ func TestCP_Upload_recursive(t *testing.T) {
 
 	// test
 	recursive = true
-	originalParallel := parallel
-	parallel = 1
 	defer func() {
 		recursive = false
-		parallel = originalParallel
 	}()
 	cmd := &cobra.Command{}
 	Run(cmd, []string{dir, "s3://" + bucketName})
@@ -322,6 +319,71 @@ func TestCP_Download(t *testing.T) {
 	}
 	if string(got) != string(content) {
 		t.Errorf("want %s, got %s", string(content), string(got))
+	}
+}
+
+func TestCP_DownloadRecursive(t *testing.T) {
+	testutils.SkipIfUnitTest(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	svc, err := config.NewS3Client()
+	if err != nil {
+		t.Fatal(err)
+	}
+	bucketName, err := testutils.CreateTemporaryBucket(ctx, svc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer testutils.DeleteBucket(context.Background(), svc, bucketName)
+
+	// prepare a test object
+	content := []byte("temporary file's content")
+	dir, err := ioutil.TempDir("", "s3cli-mini")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(dir)
+	keys := []string{
+		"a.txt",
+		"foo.zip",
+		"foo/bar/.baz/a",
+		"foo/bar/.baz/b",
+		"foo/bar/.baz/c",
+		"foo/bar/.baz/d",
+		"foo/bar/.baz/e",
+		"foo/bar/.baz/hooks/bar",
+		"foo/bar/.baz/hooks/foo",
+		"z.txt",
+	}
+	for _, key := range keys {
+		_, err = svc.PutObjectRequest(&s3.PutObjectInput{
+			Body:   bytes.NewReader(content),
+			Bucket: aws.String(bucketName),
+			Key:    aws.String(key),
+		}).Send(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// test
+	recursive = true
+	defer func() {
+		recursive = false
+	}()
+	cmd := &cobra.Command{}
+	Run(cmd, []string{"s3://" + bucketName + "/", dir})
+
+	for _, key := range keys {
+		filename := filepath.Join(dir, filepath.FromSlash(key))
+		data, err := ioutil.ReadFile(filename)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if string(data) != string(content) {
+			t.Errorf("key %s: want %s, got %s", key, string(data), string(key))
+		}
 	}
 }
 
