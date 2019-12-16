@@ -1,3 +1,4 @@
+[![test](https://github.com/shogo82148/s3cli-mini/workflows/test/badge.svg?branch=master)](https://github.com/shogo82148/s3cli-mini/actions)
 [![Coverage Status](https://coveralls.io/repos/github/shogo82148/s3cli-mini/badge.svg?branch=master)](https://coveralls.io/github/shogo82148/s3cli-mini?branch=master)
 
 # s3cli-mini
