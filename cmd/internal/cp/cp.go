@@ -604,7 +604,7 @@ func (c *client) s3s3(src, dist string) error {
 					Bucket:          aws.String(distBucket),
 					Key:             aws.String(distKey),
 					CopySource:      aws.String(srcBucket + "/" + srcKey),
-					CopySourceRange: aws.String(fmt.Sprintf("%d-%d", pos, lastByte)),
+					CopySourceRange: aws.String(fmt.Sprintf("bytes=%d-%d", pos, lastByte)),
 					UploadId:        uploadID,
 					PartNumber:      aws.Int64(i),
 				}).Send(ctx)
