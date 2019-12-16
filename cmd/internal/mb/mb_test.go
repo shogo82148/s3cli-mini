@@ -36,10 +36,16 @@ func TestMB(t *testing.T) {
 
 	Run(&cobra.Command{}, []string{"s3://" + bucketName})
 
-	_, err = svc.HeadBucketRequest(&s3.HeadBucketInput{
-		Bucket: aws.String(bucketName),
-	}).Send(ctx)
-	if err != nil {
-		t.Fatal(err)
+	// wait for the bucket is visible
+	time.Sleep(time.Second)
+	for i := 0; i < 5; i++ {
+		_, err := svc.HeadBucketRequest(&s3.HeadBucketInput{
+			Bucket: aws.String(bucketName),
+		}).Send(ctx)
+		if err == nil {
+			return
+		}
+		time.Sleep(time.Second)
 	}
+	t.Errorf("bucket %s is not found", bucketName)
 }
