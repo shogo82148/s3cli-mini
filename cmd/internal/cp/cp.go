@@ -767,8 +767,8 @@ func (c *client) s3s3recursive(src, dist string) error {
 					resp, err := c.s3.UploadPartCopyRequest(&s3.UploadPartCopyInput{
 						Bucket:          aws.String(distBucket),
 						Key:             aws.String(distKey),
-						CopySource:      aws.String(srcBucket + "/" + srcKey),
-						CopySourceRange: aws.String(fmt.Sprintf("%d-%d", pos, lastByte)),
+						CopySource:      aws.String(srcBucket + "/" + p),
+						CopySourceRange: aws.String(fmt.Sprintf("bytes=%d-%d", pos, lastByte)),
 						UploadId:        uploadID,
 						PartNumber:      aws.Int64(i),
 					}).Send(ctx)
@@ -848,7 +848,7 @@ func (c *client) s3s3recursive(src, dist string) error {
 	var err error
 	for ret := range chResult {
 		if ret.err != nil {
-			c.cmd.PrintErrln("Copy error: ", ret.err)
+			c.cmd.PrintErrln("copy error: ", ret.err)
 			err = ret.err
 			c.cancel()
 		} else {
