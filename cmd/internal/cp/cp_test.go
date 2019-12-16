@@ -14,6 +14,7 @@ import (
 	"github.com/shogo82148/s3cli-mini/cmd/internal/config"
 	"github.com/shogo82148/s3cli-mini/cmd/internal/testutils"
 	"github.com/spf13/cobra"
+	"golang.org/x/sync/errgroup"
 )
 
 func TestCP_Upload(t *testing.T) {
@@ -434,72 +435,57 @@ func TestCP_Copy(t *testing.T) {
 	}
 }
 
-// func TestCP_CopyMultipart(t *testing.T) {
-// 	if err := config.SetupTest(t); err != nil {
-// 		return
-// 	}
-// 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-// 	defer cancel()
+func TestCP_CopyMultipart(t *testing.T) {
+	testutils.SkipIfUnitTest(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
 
-// 	svc, err := config.NewS3Client()
-// 	if err != nil {
-// 		t.Fatal(err)
-// 	}
-// 	cleanup, err := prepareEmptyBucket(ctx, svc)
-// 	if err != nil {
-// 		t.Fatal(err)
-// 	}
-// 	defer cleanup()
+	svc, err := config.NewS3Client()
+	if err != nil {
+		t.Fatal(err)
+	}
+	bucketName, err := testutils.CreateTemporaryBucket(ctx, svc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer testutils.DeleteBucket(context.Background(), svc, bucketName)
 
-// 	// prepare a test object
-// 	content := bytes.Repeat([]byte("temporary file's content"), 1024*1024)
-// 	_, err = svc.PutObjectRequest(&s3.PutObjectInput{
-// 		Body:   bytes.NewReader(content),
-// 		Bucket: aws.String(bucketName),
-// 		Key:    aws.String("tmpfile"),
-// 	}).Send(ctx)
-// 	if err != nil {
-// 		t.Fatal(err)
-// 	}
+	// prepare a test object
+	content := bytes.Repeat([]byte("temporary file's content"), 1024*1024)
+	_, err = svc.PutObjectRequest(&s3.PutObjectInput{
+		Body:   bytes.NewReader(content),
+		Bucket: aws.String(bucketName),
+		Key:    aws.String("tmpfile"),
+	}).Send(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
 
-// 	original := maxCopyObjectBytes
-// 	maxCopyObjectBytes = 5 * 1024 * 1024
-// 	originalParallel := parallel
-// 	parallel = 1
-// 	defer func() {
-// 		maxCopyObjectBytes = original
-// 		parallel = originalParallel
-// 	}()
-// 	cmd := &cobra.Command{}
-// 	Run(cmd, []string{"s3://" + bucketName + "/tmpfile", "s3://" + bucketName + "/tmpfile.copy"})
+	original := maxCopyObjectBytes
+	maxCopyObjectBytes = 5 * 1024 * 1024
+	defer func() {
+		maxCopyObjectBytes = original
+	}()
+	cmd := &cobra.Command{}
+	Run(cmd, []string{"s3://" + bucketName + "/tmpfile", "s3://" + bucketName + "/tmpfile.copy"})
 
-// 	// check body
-// 	resp, err := svc.GetObjectRequest(&s3.GetObjectInput{
-// 		Bucket: aws.String(bucketName),
-// 		Key:    aws.String("tmpfile.copy"),
-// 	}).Send(ctx)
-// 	if err != nil {
-// 		t.Fatal(err)
-// 	}
-// 	body, err := ioutil.ReadAll(resp.Body)
-// 	if err != nil {
-// 		t.Fatal(err)
-// 	}
-// 	resp.Body.Close()
-// 	if string(body) != string(content) {
-// 		t.Errorf("want %s, got %s", string(content), string(body))
-// 	}
-
-// 	// cleanup
-// 	svc.DeleteObjectRequest(&s3.DeleteObjectInput{
-// 		Bucket: aws.String(bucketName),
-// 		Key:    aws.String("tmpfile"),
-// 	}).Send(ctx)
-// 	svc.DeleteObjectRequest(&s3.DeleteObjectInput{
-// 		Bucket: aws.String(bucketName),
-// 		Key:    aws.String("tmpfile.copy"),
-// 	}).Send(ctx)
-// }
+	// check body
+	resp, err := svc.GetObjectRequest(&s3.GetObjectInput{
+		Bucket: aws.String(bucketName),
+		Key:    aws.String("tmpfile.copy"),
+	}).Send(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if string(body) != string(content) {
+		t.Errorf("want %s, got %s", string(content), string(body))
+	}
+}
 
 func TestCP_CopyRecursive(t *testing.T) {
 	testutils.SkipIfUnitTest(t)
@@ -548,14 +534,10 @@ func TestCP_CopyRecursive(t *testing.T) {
 
 	// test
 	original := maxCopyObjectBytes
-	originalParallel := parallel
-	parallel = 1
-	maxCopyObjectBytes = 5 * 1024 * 1024
 	recursive = true
 	defer func() {
 		recursive = false
 		maxCopyObjectBytes = original
-		parallel = originalParallel
 	}()
 	cmd := &cobra.Command{}
 	Run(cmd, []string{"s3://" + bucketName + "/foo", "s3://" + bucketName + "/fizz"})
@@ -586,5 +568,95 @@ func TestCP_CopyRecursive(t *testing.T) {
 		if string(body) != string(content) {
 			t.Errorf("want %s, got %s", string(content), string(body))
 		}
+	}
+}
+
+func TestCP_CopyRecursiveMultipart(t *testing.T) {
+	testutils.SkipIfUnitTest(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	svc, err := config.NewS3Client()
+	if err != nil {
+		t.Fatal(err)
+	}
+	bucketName, err := testutils.CreateTemporaryBucket(ctx, svc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer testutils.DeleteBucket(context.Background(), svc, bucketName)
+
+	// prepare test objects
+	content := bytes.Repeat([]byte("temporary"), 1024*1024)
+	dir, err := ioutil.TempDir("", "s3cli-mini")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(dir)
+	keys := []string{
+		"foo.zip",
+		"foo/bar/.baz/a",
+		"foo/bar/.baz/hooks/bar",
+		"z.txt",
+	}
+	{
+		g, ctx := errgroup.WithContext(ctx)
+		for _, key := range keys {
+			key := key
+			g.Go(func() error {
+				_, err := svc.PutObjectRequest(&s3.PutObjectInput{
+					Body:   bytes.NewReader(content),
+					Bucket: aws.String(bucketName),
+					Key:    aws.String(key),
+				}).Send(ctx)
+				return err
+			})
+		}
+		if err := g.Wait(); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	original := maxCopyObjectBytes
+	maxCopyObjectBytes = 5 * 1024 * 1024
+	recursive = true
+	defer func() {
+		maxCopyObjectBytes = original
+		recursive = false
+	}()
+	cmd := &cobra.Command{}
+	Run(cmd, []string{"s3://" + bucketName + "/foo", "s3://" + bucketName + "/fizz"})
+
+	// check body
+	expected := []string{
+		"fizz/bar/.baz/a",
+		"fizz/bar/.baz/hooks/bar",
+	}
+	{
+		g, ctx := errgroup.WithContext(ctx)
+		for _, key := range expected {
+			key := key
+			g.Go(func() error {
+				resp, err := svc.GetObjectRequest(&s3.GetObjectInput{
+					Bucket: aws.String(bucketName),
+					Key:    aws.String(key),
+				}).Send(ctx)
+				if err != nil {
+					t.Errorf("error while getting %s: %v", key, err)
+					return nil
+				}
+				defer resp.Body.Close()
+				body, err := ioutil.ReadAll(resp.Body)
+				if err != nil {
+					t.Errorf("error while reading %s: %v", key, err)
+					return nil
+				}
+				if string(body) != string(content) {
+					t.Errorf("want %s, got %s", string(content), string(body))
+				}
+				return nil
+			})
+		}
+		g.Wait()
 	}
 }
