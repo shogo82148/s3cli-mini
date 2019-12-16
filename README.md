@@ -7,17 +7,13 @@ Golang port for AWS Command Line Interface S3 subcommand.
 
 ### cp
 
-`cp` command copies a local file or S3 object to another location locally or in S3.
-
-#### Usage
+The `cp` command copies a local file or S3 object to another location locally or in S3.
 
 ```
 s3cli-mini cp <LocalPath> <S3Uri> or <S3Uri> <LocalPath> or <S3Uri> <S3Uri>
 ```
 
-#### Examples
-
-```
+```bash
 # download from a S3 bucket
 s3cli-mini cp s3://your-bucket/foobar.zip .
 
@@ -26,6 +22,27 @@ s3cli-mini cp foobar.zip s3://your-bucket/
 
 # copy the file from a S3 bucket to another S3 bucket.
 s3cli-mini cp s3://your-bucket/foobar.zip s3://another-bucket/
+```
+
+### ls
+
+The `ls` command lists S3 objects and common prefixes under a prefix or all S3 buckets.
+
+```bash
+# show bucket list
+s3cli-mini ls
+
+# list the objects in the bucket.
+s3cli-mini ls s3://your-bucket/
+```
+
+### mb
+
+The `mb` command creates an S3 bucket.
+
+```bash
+# create a bucket
+s3cli-mini mb your-bucket
 ```
 
 ## Licence
