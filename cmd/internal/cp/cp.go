@@ -387,10 +387,11 @@ func (c *client) s3stdout(bucket, key string) error {
 		return err
 	}
 	body := res.GetObjectOutput.Body
+	defer body.Close()
 	if _, err := io.Copy(os.Stdout, body); err != nil {
 		return err
 	}
-	return body.Close()
+	return nil
 }
 
 func (c *client) s3local(src, dist string) error {
