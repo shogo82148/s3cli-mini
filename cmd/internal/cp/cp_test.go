@@ -660,3 +660,55 @@ func TestCP_CopyRecursiveMultipart(t *testing.T) {
 		g.Wait()
 	}
 }
+
+func TestCP_DownloadStdout(t *testing.T) {
+	testutils.SkipIfUnitTest(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	svc, err := config.NewS3Client()
+	if err != nil {
+		t.Fatal(err)
+	}
+	bucketName, err := testutils.CreateTemporaryBucket(ctx, svc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer testutils.DeleteBucket(context.Background(), svc, bucketName)
+
+	// prepare a test object
+	content := []byte("temporary file's content")
+	_, err = svc.PutObjectRequest(&s3.PutObjectInput{
+		Body:   bytes.NewReader(content),
+		Bucket: aws.String(bucketName),
+		Key:    aws.String("tmpfile"),
+	}).Send(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// test
+	dir, err := ioutil.TempDir("", "s3cli-mini")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(dir)
+	filename := filepath.Join(dir, "tmpfile")
+	origStdout := os.Stdout
+	defer func() { os.Stdout = origStdout }() // restore stdout
+
+	os.Stdout, err = os.OpenFile(filename, os.O_RDWR|os.O_CREATE, 0600)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cmd := &cobra.Command{}
+	Run(cmd, []string{"s3://" + bucketName + "/tmpfile", "-"})
+
+	got, err := ioutil.ReadFile(filename)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != string(content) {
+		t.Errorf("want %s, got %s", string(content), string(got))
+	}
+}

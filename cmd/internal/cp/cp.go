@@ -3,6 +3,7 @@ package cp
 import (
 	"context"
 	"fmt"
+	"io"
 	"mime"
 	"os"
 	"path"
@@ -29,6 +30,8 @@ var maxCopyObjectBytes = int64(5 * 1024 * 1024 * 1024)
 
 // chunk size for multipart copying objects
 const copyChunkBytes = 5 * 1024 * 1024
+
+const distStdout = "-"
 
 var dryrun bool
 var parallel int
@@ -371,11 +374,33 @@ func (c *client) locals3recursive(src, dist string) error {
 	return err
 }
 
+func (c *client) s3stdout(bucket, key string) error {
+	if dryrun {
+		c.cmd.PrintErrf("download s3://%s/%s to STDOUT\n", bucket, key)
+		return nil
+	}
+	res, err := c.s3.GetObjectRequest(&s3.GetObjectInput{
+		Bucket: aws.String(bucket),
+		Key:    aws.String(key),
+	}).Send(c.ctx)
+	if err != nil {
+		return err
+	}
+	body := res.GetObjectOutput.Body
+	if _, err := io.Copy(os.Stdout, body); err != nil {
+		return err
+	}
+	return body.Close()
+}
+
 func (c *client) s3local(src, dist string) error {
 	bucket, key := parsePath(src)
 	if key == "" || key[len(key)-1] == '/' {
 		c.cmd.PrintErrln("Error: Invalid argument type")
 		os.Exit(1)
+	}
+	if dist == distStdout {
+		return c.s3stdout(bucket, key)
 	}
 	if info, err := os.Stat(dist); err == nil && info.IsDir() {
 		dist = filepath.Join(dist, path.Base(key))
