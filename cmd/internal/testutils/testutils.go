@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"log"
 	"os"
 	"testing"
 	"time"
@@ -62,18 +63,26 @@ func DeleteBucket(ctx context.Context, svc s3iface.ClientAPI, bucketName string)
 	for p.Next(ctx) {
 		page := p.CurrentPage()
 		for _, obj := range page.Contents {
-			svc.DeleteObjectRequest(&s3.DeleteObjectInput{
+			_, err := svc.DeleteObjectRequest(&s3.DeleteObjectInput{
 				Bucket: aws.String(bucketName),
 				Key:    obj.Key,
 			}).Send(ctx)
+			if err != nil {
+				log.Printf("fail to delete s3://%s/%s: %v", bucketName, aws.StringValue(obj.Key), err)
+			}
 		}
 	}
 	if err := p.Err(); err != nil {
+		log.Printf("fail to list bucket %s: %v", bucketName, err)
 		return err
 	}
 
 	_, err := svc.DeleteBucketRequest(&s3.DeleteBucketInput{
 		Bucket: aws.String(bucketName),
 	}).Send(ctx)
-	return err
+	if err != nil {
+		log.Printf("fail to delete bucket %s: %v", bucketName, err)
+		return err
+	}
+	return nil
 }

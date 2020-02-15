@@ -2,6 +2,7 @@ package cp
 
 import (
 	"context"
+	"io"
 	"log"
 	"os"
 	"path/filepath"
@@ -14,15 +15,16 @@ import (
 
 type task interface {
 	Send(ctx context.Context) error
-	Abort(ctx context.Context) error
 }
 
 type uploader struct {
 	ctx      context.Context
+	cancel   context.CancelFunc
 	s3       s3iface.ClientAPI
 	task     chan task
 	wg       sync.WaitGroup
 	parallel int
+	partSize int64
 }
 
 func (u *uploader) upload(src, dist string) error {
@@ -41,15 +43,63 @@ func (u *uploader) upload(src, dist string) error {
 	}
 	defer f.Close()
 
-	input := &s3.PutObjectInput{
-		Body:   f,
-		Bucket: aws.String(bucket),
-		Key:    aws.String(key),
+	stat, err := f.Stat()
+	if err != nil {
+		return err
 	}
 	log.Printf("upload: %s to s3://%s/%s", f.Name(), bucket, key)
-	u.task <- &singleUploadTask{
-		s3:    u.s3,
-		input: input,
+	if size := stat.Size(); size < u.partSize {
+		// single part upload
+		input := &s3.PutObjectInput{
+			Body:          f,
+			Bucket:        aws.String(bucket),
+			Key:           aws.String(key),
+			ContentLength: aws.Int64(size),
+		}
+		u.task <- &singleUploadTask{
+			uploader: u,
+			input:    input,
+			cancel:   u.cancel,
+		}
+	} else {
+		// multipart upload
+		resp, err := u.s3.CreateMultipartUploadRequest(&s3.CreateMultipartUploadInput{
+			Bucket: aws.String(bucket),
+			Key:    aws.String(key),
+		}).Send(u.ctx)
+		if err != nil {
+			return err
+		}
+		uploadID := resp.UploadId
+		uploadContext := &multiportUploadContext{
+			Context:  u.ctx,
+			cancel:   u.cancel,
+			uploader: u,
+			uploadID: uploadID,
+		}
+		for i, pos := int64(1), int64(0); pos < size; i, pos = i+1, pos+u.partSize {
+			n := u.partSize
+			if bytesLeft := size - pos; bytesLeft < n {
+				n = bytesLeft
+			}
+			input := &s3.UploadPartInput{
+				PartNumber: aws.Int64(i),
+				Body:       io.NewSectionReader(f, pos, n),
+				Bucket:     aws.String(bucket),
+				Key:        aws.String(key),
+				UploadId:   uploadID,
+			}
+			uploadContext.wg.Add(1)
+			u.task <- &multipartUploadTask{
+				ctx:   uploadContext,
+				input: input,
+			}
+		}
+		u.wg.Add(1)
+		go func() {
+			defer u.wg.Done()
+			uploadContext.wait()
+		}()
 	}
 
 	close(u.task)
@@ -61,49 +111,49 @@ func (u *uploader) sendTask() {
 	defer u.wg.Done()
 	for t := range u.task {
 		if err := t.Send(u.ctx); err != nil {
-			t.Abort(u.ctx)
+			u.cancel()
 		}
 	}
 }
 
+func (u *uploader) abort(ctx context.Context) {
+	u.cancel()
+}
+
 type singleUploadTask struct {
-	s3     s3iface.ClientAPI
-	input  *s3.PutObjectInput
-	cancel context.CancelFunc
+	uploader *uploader
+	input    *s3.PutObjectInput
+	cancel   context.CancelFunc
 }
 
 func (t *singleUploadTask) Send(ctx context.Context) error {
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
-	t.cancel = cancel
-	_, err := t.s3.PutObjectRequest(t.input).Send(ctx)
+	_, err := t.uploader.s3.PutObjectRequest(t.input).Send(ctx)
 	return err
 }
 
-func (t *singleUploadTask) Abort(ctx context.Context) error {
-	if t.cancel != nil {
-		t.cancel()
+type multiportUploadContext struct {
+	context.Context
+	cancel   context.CancelFunc
+	uploader *uploader
+	wg       sync.WaitGroup
+	uploadID *string
+}
+
+func (ctx *multiportUploadContext) wait() {
+	ctx.wg.Wait()
+}
+
+type multipartUploadTask struct {
+	ctx   *multiportUploadContext
+	input *s3.UploadPartInput
+}
+
+func (t *multipartUploadTask) Send(ctx context.Context) error {
+	defer t.ctx.wg.Done()
+	if ctx.Err() != nil {
+		return nil
 	}
-	return nil
-}
-
-type multiUploadTask struct {
-	s3     s3iface.ClientAPI
-	input  *s3.UploadPartInput
-	cancel context.CancelFunc
-}
-
-func (t *multiUploadTask) Send(ctx context.Context) error {
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
-	t.cancel = cancel
-	_, err := t.s3.UploadPartRequest(t.input).Send(ctx)
+	log.Println("uploading part: ", *t.input.PartNumber)
+	_, err := t.ctx.uploader.s3.UploadPartRequest(t.input).Send(ctx)
 	return err
-}
-
-func (t *multiUploadTask) Abort(ctx context.Context) error {
-	if t.cancel != nil {
-		t.cancel()
-	}
-	return nil
 }
