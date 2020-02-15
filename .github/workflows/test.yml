@@ -22,7 +22,7 @@ jobs:
           go-version: "1.13"
 
       - name: Check out code into the Go module directory
-        uses: actions/checkout@v1
+        uses: actions/checkout@v2
 
       - uses: actions/cache@v1
         with:
@@ -45,7 +45,6 @@ jobs:
       - name: Send coverage
         uses: shogo82148/actions-goveralls@v1
         with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
           path-to-profile: profile.cov
           parallel: true
           job-number: ${{ strategy.job-index }}
@@ -57,5 +56,4 @@ jobs:
     steps:
       - uses: shogo82148/actions-goveralls@v1
         with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
           parallel-finished: true
