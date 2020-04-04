@@ -35,17 +35,18 @@ func TestMB(t *testing.T) {
 	defer testutils.DeleteBucket(ctx, svc, bucketName)
 
 	Run(&cobra.Command{}, []string{"s3://" + bucketName})
+	time.Sleep(5 * time.Second)
 
 	// wait for the bucket is visible
 	time.Sleep(time.Second)
-	for i := 0; i < 10; i++ {
+	for i := 0; i < 60; i++ {
 		_, err := svc.HeadBucketRequest(&s3.HeadBucketInput{
 			Bucket: aws.String(bucketName),
 		}).Send(ctx)
 		if err == nil {
 			return
 		}
-		time.Sleep(time.Second)
+		time.Sleep(10 * time.Second)
 	}
 	t.Errorf("bucket %s is not found", bucketName)
 }
