@@ -10,6 +10,7 @@ import (
 	"os/signal"
 	"path"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"syscall"
@@ -932,18 +933,101 @@ type uploader struct {
 	key       string
 	readerPos int64
 	totalSize int64
+
+	mu    sync.Mutex
+	parts completedParts
+}
+
+type completedParts []s3.CompletedPart
+
+func (a completedParts) Len() int      { return len(a) }
+func (a completedParts) Swap(i, j int) { a[i], a[j] = a[j], a[i] }
+func (a completedParts) Less(i, j int) bool {
+	return aws.Int64Value(a[i].PartNumber) < aws.Int64Value(a[j].PartNumber)
 }
 
 func (u *uploader) upload() {
 	u.initSize()
-	r, n, err := u.nextReader()
+	r, _, err := u.nextReader()
 	if err == io.EOF {
 		u.singlePartUpload(r)
 		return
 	}
 	if err != nil {
+		u.setError(err)
+		return
 	}
-	_ = n
+
+	// start multipart upload
+	resp, err := u.client.s3.CreateMultipartUploadRequest(&s3.CreateMultipartUploadInput{
+		Bucket:             aws.String(u.bucket),
+		Key:                aws.String(u.key),
+		ACL:                u.client.acl,
+		ContentType:        getContentType(u.key),
+		CacheControl:       nullableString(cacheControl),
+		ContentDisposition: nullableString(contentDisposition),
+		ContentEncoding:    nullableString(contentEncoding),
+		ContentLanguage:    nullableString(contentLanguage),
+		Expires:            u.client.expires,
+	}).Send(u.client.ctx)
+	if err != nil {
+		u.setError(err)
+		return
+	}
+	uploadID := aws.StringValue(resp.UploadId)
+
+	var wg sync.WaitGroup
+	num := int64(1)
+	for {
+		if !u.client.acquire() {
+			break
+		}
+		wg.Add(1)
+		go func() {
+			defer u.client.release()
+			defer wg.Done()
+			u.uploadChunk(uploadID, num, r)
+		}()
+		if err == io.EOF {
+			break
+		}
+		num++
+
+		var n int64
+		r, n, err = u.nextReader()
+		if n == 0 {
+			break
+		}
+	}
+
+	// complete
+	u.client.wg.Add(1)
+	go func() {
+		defer u.client.wg.Done()
+		wg.Wait()
+		if u.client.ctx.Err() != nil {
+			// the request is aborted
+			_, err := u.client.s3.AbortMultipartUploadRequest(&s3.AbortMultipartUploadInput{
+				Bucket:   aws.String(u.bucket),
+				Key:      aws.String(u.key),
+				UploadId: aws.String(uploadID),
+			}).Send(u.client.ctxAbort)
+			if err != nil {
+				u.client.cmd.PrintErrln("failed to abort multipart upload ", err)
+			}
+			return
+		}
+		sort.Sort(u.parts)
+		_, err := u.client.s3.CompleteMultipartUploadRequest(&s3.CompleteMultipartUploadInput{
+			Bucket:          aws.String(u.bucket),
+			Key:             aws.String(u.key),
+			UploadId:        aws.String(uploadID),
+			MultipartUpload: &s3.CompletedMultipartUpload{Parts: u.parts},
+		}).Send(u.client.ctx)
+		if err != nil {
+			u.setError(err)
+		}
+	}()
 }
 
 func (u *uploader) initSize() {
@@ -1024,10 +1108,37 @@ func (u *uploader) singlePartUpload(r io.ReadSeeker) {
 		}
 		_, err := u.client.s3.PutObjectRequest(input).Send(u.client.ctx)
 		if err != nil {
-			u.client.cmd.PrintErrln(err)
+			u.setError(err)
 		}
 	}()
 	return
+}
+
+func (u *uploader) uploadChunk(uploadID string, num int64, r io.ReadSeeker) {
+	resp, err := u.client.s3.UploadPartRequest(&s3.UploadPartInput{
+		Bucket:     aws.String(u.bucket),
+		Key:        aws.String(u.key),
+		Body:       r,
+		UploadId:   aws.String(uploadID),
+		PartNumber: aws.Int64(num),
+	}).Send(u.client.ctx)
+	if err != nil {
+		u.setError(err)
+		return
+	}
+	part := s3.CompletedPart{ETag: resp.ETag, PartNumber: aws.Int64(num)}
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	u.parts = append(u.parts, part)
+}
+
+func (u *uploader) setError(err error) {
+	select {
+	case <-u.client.ctx.Done():
+	default:
+	}
+	u.client.cancel()
+	u.client.cmd.PrintErrln(err)
 }
 
 func parsePath(path string) (bucket, key string) {
