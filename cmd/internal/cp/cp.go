@@ -6,10 +6,12 @@ import (
 	"io"
 	"mime"
 	"os"
+	"os/signal"
 	"path"
 	"path/filepath"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -71,6 +73,8 @@ func Init(cmd *cobra.Command) {
 type client struct {
 	ctx            context.Context
 	cancel         context.CancelFunc
+	ctxAbort       context.Context
+	cancelAbort    context.CancelFunc
 	cmd            *cobra.Command
 	s3             s3iface.ClientAPI
 	uploader       s3manageriface.UploaderAPI
@@ -84,6 +88,8 @@ type client struct {
 func Run(cmd *cobra.Command, args []string) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+	ctxAbort, cancelAbort := context.WithCancel(context.Background())
+	defer cancelAbort()
 
 	if len(args) != 2 {
 		if err := cmd.Usage(); err != nil {
@@ -94,9 +100,11 @@ func Run(cmd *cobra.Command, args []string) {
 	}
 
 	c := client{
-		ctx:    ctx,
-		cancel: cancel,
-		cmd:    cmd,
+		ctx:         ctx,
+		cancel:      cancel,
+		ctxAbort:    ctxAbort,
+		cancelAbort: cancelAbort,
+		cmd:         cmd,
 	}
 	var err error
 	c.followSymlinks = followSymlinks && !noFollowSymlinks
@@ -113,6 +121,8 @@ func Run(cmd *cobra.Command, args []string) {
 		}
 		c.expires = &t
 	}
+	go c.handleSignal()
+
 	c.Run(args[0], args[1])
 }
 
@@ -249,6 +259,20 @@ func (c *client) locals3(src, dist string) error {
 		return err
 	}
 	return nil
+}
+
+func (c *client) handleSignal() {
+	count := 0
+	ch := make(chan os.Signal, 1)
+	signal.Notify(ch, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM)
+	for range ch {
+		if count == 0 {
+			c.cancel()
+		} else {
+			c.cancelAbort()
+		}
+		count++
+	}
 }
 
 func (c *client) locals3recursive(src, dist string) error {
