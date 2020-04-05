@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log"
 	"mime"
 	"os"
 	"os/signal"
@@ -294,6 +295,11 @@ func (c *client) locals3(src, dist string) error {
 
 func (c *client) locals3recursive(src, dist string) error {
 	err := fastwalk.Walk(src, func(p string, typ os.FileMode) error {
+		select {
+		case <-c.ctx.Done():
+			return c.ctx.Err()
+		default:
+		}
 		info, err := os.Stat(p)
 		if err != nil {
 			return err
@@ -867,6 +873,7 @@ func (a completedParts) Less(i, j int) bool {
 
 func (u *uploader) upload() {
 	u.initSize()
+	log.Println(u.key, ":", u.totalSize)
 	r, _, err := u.nextReader()
 	if err == io.EOF {
 		u.singlePartUpload(r)
