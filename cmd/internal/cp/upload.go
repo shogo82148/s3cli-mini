@@ -38,7 +38,7 @@ func (c *client) locals3(src, dist string) error {
 	c.cmd.PrintErrf("Upload %s to s3://%s/%s\n", src, bucket, key)
 	u.upload()
 	c.wg.Wait()
-	return nil
+	return c.ctx.Err()
 }
 
 func (c *client) locals3recursive(src, dist string) error {
@@ -183,7 +183,7 @@ func (u *uploader) upload() {
 			Key:             aws.String(u.key),
 			UploadId:        aws.String(uploadID),
 			MultipartUpload: &s3.CompletedMultipartUpload{Parts: u.parts},
-		}).Send(u.client.ctx)
+		}).Send(u.client.ctxAbort)
 		if err != nil {
 			u.setError(err)
 		}
@@ -295,6 +295,7 @@ func (u *uploader) uploadChunk(uploadID string, num int64, r io.ReadSeeker) {
 func (u *uploader) setError(err error) {
 	select {
 	case <-u.client.ctx.Done():
+		return
 	default:
 	}
 	u.client.cancel()
