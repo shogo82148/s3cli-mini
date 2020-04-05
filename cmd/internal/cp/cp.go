@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"log"
 	"mime"
 	"os"
 	"os/signal"
@@ -300,11 +299,7 @@ func (c *client) locals3recursive(src, dist string) error {
 			return c.ctx.Err()
 		default:
 		}
-		info, err := os.Stat(p)
-		if err != nil {
-			return err
-		}
-		if info.IsDir() {
+		if typ.IsDir() {
 			if typ == os.ModeSymlink && c.followSymlinks {
 				return fastwalk.TraverseLink
 			}
@@ -873,7 +868,6 @@ func (a completedParts) Less(i, j int) bool {
 
 func (u *uploader) upload() {
 	u.initSize()
-	log.Println(u.key, ":", u.totalSize)
 	r, _, err := u.nextReader()
 	if err == io.EOF {
 		u.singlePartUpload(r)
@@ -965,7 +959,6 @@ func (u *uploader) initSize() {
 		if err != nil {
 			return
 		}
-		log.Println(info.Mode())
 		if !info.Mode().IsRegular() {
 			// non-regular file, Size is system-dependent.
 			return
