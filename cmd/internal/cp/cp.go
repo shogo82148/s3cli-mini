@@ -1,6 +1,7 @@
 package cp
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -75,6 +76,8 @@ type client struct {
 	cancel         context.CancelFunc
 	ctxAbort       context.Context
 	cancelAbort    context.CancelFunc
+	wg             sync.WaitGroup
+	semaphore      chan struct{}
 	cmd            *cobra.Command
 	s3             s3iface.ClientAPI
 	uploader       s3manageriface.UploaderAPI
@@ -98,12 +101,16 @@ func Run(cmd *cobra.Command, args []string) {
 		}
 		return
 	}
+	if parallel <= 0 {
+		parallel = 4
+	}
 
 	c := client{
 		ctx:         ctx,
 		cancel:      cancel,
 		ctxAbort:    ctxAbort,
 		cancelAbort: cancelAbort,
+		semaphore:   make(chan struct{}, parallel),
 		cmd:         cmd,
 	}
 	var err error
@@ -225,6 +232,24 @@ func (c *client) Run(src, dist string) {
 	panic("will not reach")
 }
 
+// acquire controls parallelism.
+// waits for the semaphore and returns true if success.
+// the caller should call c.release after the acquire returns true.
+func (c *client) acquire() bool {
+	select {
+	case <-c.ctx.Done():
+		return false
+	case c.semaphore <- struct{}{}:
+		c.wg.Add(1)
+		return true
+	}
+}
+
+func (c *client) release() {
+	<-c.semaphore
+	c.wg.Done()
+}
+
 func (c *client) locals3(src, dist string) error {
 	bucket, key := parsePath(dist)
 	if key == "" || key[len(key)-1] == '/' {
@@ -241,23 +266,15 @@ func (c *client) locals3(src, dist string) error {
 	}
 	defer f.Close()
 
-	input := &s3manager.UploadInput{
-		Body:               f,
-		Bucket:             aws.String(bucket),
-		Key:                aws.String(key),
-		ACL:                c.acl,
-		ContentType:        getContentType(key),
-		CacheControl:       nullableString(cacheControl),
-		ContentDisposition: nullableString(contentDisposition),
-		ContentEncoding:    nullableString(contentEncoding),
-		ContentLanguage:    nullableString(contentLanguage),
-		Expires:            c.expires,
+	u := &uploader{
+		client: c,
+		body:   f,
+		bucket: bucket,
+		key:    key,
 	}
 	c.cmd.PrintErrf("Upload %s to s3://%s/%s\n", src, bucket, key)
-	_, err = c.uploader.UploadWithContext(c.ctx, input)
-	if err != nil {
-		return err
-	}
+	u.upload()
+	c.wg.Wait()
 	return nil
 }
 
@@ -906,6 +923,111 @@ func (c *client) s3s3recursive(src, dist string) error {
 		}
 	}
 	return err
+}
+
+type uploader struct {
+	client    *client
+	body      io.Reader
+	bucket    string
+	key       string
+	readerPos int64
+	totalSize int64
+}
+
+func (u *uploader) upload() {
+	u.initSize()
+	r, n, err := u.nextReader()
+	if err == io.EOF {
+		u.singlePartUpload(r)
+		return
+	}
+	if err != nil {
+	}
+	_ = n
+}
+
+func (u *uploader) initSize() {
+	u.totalSize = -1
+	switch body := u.body.(type) {
+	case interface{ Stat() (os.FileInfo, error) }:
+		info, err := body.Stat()
+		if err != nil {
+			return
+		}
+		if (info.Mode() & os.ModeType) != 0 {
+			// non-regular file, Size is system-dependent.
+			return
+		}
+		u.totalSize = info.Size()
+	case interface{ Len() int }:
+		u.totalSize = int64(body.Len())
+	case io.Seeker:
+		current, err := body.Seek(0, io.SeekCurrent)
+		if err != nil {
+			return
+		}
+		end, err := body.Seek(0, io.SeekEnd)
+		if err != nil {
+			return
+		}
+		_, err = body.Seek(current, io.SeekStart)
+		if err != nil {
+			return
+		}
+		u.totalSize = end - current
+	}
+}
+
+func (u *uploader) nextReader() (io.ReadSeeker, int64, error) {
+	switch r := u.body.(type) {
+	case io.ReaderAt:
+		var err error
+		n := int64(copyChunkBytes)
+		if u.totalSize >= 0 {
+			remain := u.totalSize - u.readerPos
+			if remain <= n {
+				n = remain
+				err = io.EOF
+			}
+		}
+		reader := io.NewSectionReader(r, u.readerPos, n)
+		return reader, n, err
+	}
+
+	var buf bytes.Buffer
+	chunk := &io.LimitedReader{
+		R: u.body,
+		N: copyChunkBytes,
+	}
+	n, err := buf.ReadFrom(chunk)
+	u.readerPos += n
+	return bytes.NewReader(buf.Bytes()), n, err
+}
+
+func (u *uploader) singlePartUpload(r io.ReadSeeker) {
+	if !u.client.acquire() {
+		return
+	}
+	go func() {
+		defer u.client.release()
+		input := &s3.PutObjectInput{
+			Body:               r,
+			Bucket:             aws.String(u.bucket),
+			Key:                aws.String(u.key),
+			ACL:                u.client.acl,
+			ContentType:        getContentType(u.key),
+			CacheControl:       nullableString(cacheControl),
+			ContentDisposition: nullableString(contentDisposition),
+			ContentEncoding:    nullableString(contentEncoding),
+			ContentLanguage:    nullableString(contentLanguage),
+			Expires:            u.client.expires,
+		}
+		_, err := u.client.s3.PutObjectRequest(input).Send(u.client.ctx)
+		if err != nil {
+			u.client.cmd.PrintErrln(err)
+		}
+	}()
+	return
 }
 
 func parsePath(path string) (bucket, key string) {
