@@ -251,6 +251,20 @@ func (c *client) release() {
 	c.wg.Done()
 }
 
+func (c *client) handleSignal() {
+	count := 0
+	ch := make(chan os.Signal, 1)
+	signal.Notify(ch, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM)
+	for range ch {
+		if count == 0 {
+			c.cancel()
+		} else {
+			c.cancelAbort()
+		}
+		count++
+	}
+}
+
 func (c *client) locals3(src, dist string) error {
 	bucket, key := parsePath(dist)
 	if key == "" || key[len(key)-1] == '/' {
@@ -277,20 +291,6 @@ func (c *client) locals3(src, dist string) error {
 	u.upload()
 	c.wg.Wait()
 	return nil
-}
-
-func (c *client) handleSignal() {
-	count := 0
-	ch := make(chan os.Signal, 1)
-	signal.Notify(ch, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM)
-	for range ch {
-		if count == 0 {
-			c.cancel()
-		} else {
-			c.cancelAbort()
-		}
-		count++
-	}
 }
 
 func (c *client) locals3recursive(src, dist string) error {
