@@ -1,15 +1,19 @@
 package cp
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
 	"mime"
 	"os"
+	"os/signal"
 	"path"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -71,6 +75,10 @@ func Init(cmd *cobra.Command) {
 type client struct {
 	ctx            context.Context
 	cancel         context.CancelFunc
+	ctxAbort       context.Context
+	cancelAbort    context.CancelFunc
+	wg             sync.WaitGroup
+	semaphore      chan struct{}
 	cmd            *cobra.Command
 	s3             s3iface.ClientAPI
 	uploader       s3manageriface.UploaderAPI
@@ -84,6 +92,8 @@ type client struct {
 func Run(cmd *cobra.Command, args []string) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+	ctxAbort, cancelAbort := context.WithCancel(context.Background())
+	defer cancelAbort()
 
 	if len(args) != 2 {
 		if err := cmd.Usage(); err != nil {
@@ -92,11 +102,17 @@ func Run(cmd *cobra.Command, args []string) {
 		}
 		return
 	}
+	if parallel <= 0 {
+		parallel = 4
+	}
 
 	c := client{
-		ctx:    ctx,
-		cancel: cancel,
-		cmd:    cmd,
+		ctx:         ctx,
+		cancel:      cancel,
+		ctxAbort:    ctxAbort,
+		cancelAbort: cancelAbort,
+		semaphore:   make(chan struct{}, parallel),
+		cmd:         cmd,
 	}
 	var err error
 	c.followSymlinks = followSymlinks && !noFollowSymlinks
@@ -113,6 +129,8 @@ func Run(cmd *cobra.Command, args []string) {
 		}
 		c.expires = &t
 	}
+	go c.handleSignal()
+
 	c.Run(args[0], args[1])
 }
 
@@ -215,6 +233,38 @@ func (c *client) Run(src, dist string) {
 	panic("will not reach")
 }
 
+// acquire controls parallelism.
+// waits for the semaphore and returns true if success.
+// the caller should call c.release after the acquire returns true.
+func (c *client) acquire() bool {
+	select {
+	case <-c.ctx.Done():
+		return false
+	case c.semaphore <- struct{}{}:
+		c.wg.Add(1)
+		return true
+	}
+}
+
+func (c *client) release() {
+	<-c.semaphore
+	c.wg.Done()
+}
+
+func (c *client) handleSignal() {
+	count := 0
+	ch := make(chan os.Signal, 1)
+	signal.Notify(ch, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM)
+	for range ch {
+		if count == 0 {
+			c.cancel()
+		} else {
+			c.cancelAbort()
+		}
+		count++
+	}
+}
+
 func (c *client) locals3(src, dist string) error {
 	bucket, key := parsePath(dist)
 	if key == "" || key[len(key)-1] == '/' {
@@ -229,148 +279,60 @@ func (c *client) locals3(src, dist string) error {
 	if err != nil {
 		return err
 	}
-	defer f.Close()
 
-	input := &s3manager.UploadInput{
-		Body:               f,
-		Bucket:             aws.String(bucket),
-		Key:                aws.String(key),
-		ACL:                c.acl,
-		ContentType:        getContentType(key),
-		CacheControl:       nullableString(cacheControl),
-		ContentDisposition: nullableString(contentDisposition),
-		ContentEncoding:    nullableString(contentEncoding),
-		ContentLanguage:    nullableString(contentLanguage),
-		Expires:            c.expires,
+	u := &uploader{
+		client: c,
+		body:   f,
+		bucket: bucket,
+		key:    key,
 	}
 	c.cmd.PrintErrf("Upload %s to s3://%s/%s\n", src, bucket, key)
-	_, err = c.uploader.UploadWithContext(c.ctx, input)
-	if err != nil {
-		return err
-	}
+	u.upload()
+	c.wg.Wait()
 	return nil
 }
 
 func (c *client) locals3recursive(src, dist string) error {
-	type result struct {
-		message string
-		err     error
-	}
-	var wg sync.WaitGroup
-	chSource := make(chan string, parallel)
-	chResult := make(chan result, parallel)
-
-	// walk local file system
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		defer close(chSource)
-		if err := fastwalk.Walk(src, func(path string, typ os.FileMode) error {
-			info, err := os.Stat(path)
-			if err != nil {
-				return err
-			}
-			if info.IsDir() {
-				if typ == os.ModeSymlink && c.followSymlinks {
-					return fastwalk.TraverseLink
-				}
-				return nil
-			}
-			select {
-			case chSource <- path:
-			case <-c.ctx.Done():
-				return c.ctx.Err()
+	err := fastwalk.Walk(src, func(p string, typ os.FileMode) error {
+		select {
+		case <-c.ctx.Done():
+			return c.ctx.Err()
+		default:
+		}
+		if typ.IsDir() {
+			if typ == os.ModeSymlink && c.followSymlinks {
+				return fastwalk.TraverseLink
 			}
 			return nil
-		}); err != nil {
-			select {
-			case chResult <- result{err: err}:
-			case <-c.ctx.Done():
-			}
 		}
-	}()
 
-	// upload workers
-	upload := func(p string) (string, error) {
 		bucket, key := parsePath(dist)
 		rel, err := filepath.Rel(src, p)
 		if err != nil {
-			return "", err
+			return err
 		}
 		key = path.Join(key, filepath.ToSlash(rel))
 		if dryrun {
-			return fmt.Sprintf("upload %s to s3://%s/%s", p, bucket, key), nil
+			c.cmd.PrintErrf("Upload %s to s3://%s/%s\n", src, bucket, key)
+			return nil
 		}
+
 		f, err := os.Open(p)
 		if err != nil {
-			return "", err
+			return err
 		}
-		defer f.Close()
 
-		input := &s3manager.UploadInput{
-			Body:               f,
-			Bucket:             aws.String(bucket),
-			Key:                aws.String(key),
-			ACL:                c.acl,
-			ContentType:        getContentType(key),
-			CacheControl:       nullableString(cacheControl),
-			ContentDisposition: nullableString(contentDisposition),
-			ContentEncoding:    nullableString(contentEncoding),
-			ContentLanguage:    nullableString(contentLanguage),
-			Expires:            c.expires,
+		u := &uploader{
+			client: c,
+			body:   f,
+			bucket: bucket,
+			key:    key,
 		}
-		_, err = c.uploader.UploadWithContext(c.ctx, input)
-		if err != nil {
-			return "", err
-		}
-		return fmt.Sprintf("upload %s to s3://%s/%s", p, bucket, key), nil
-	}
-	wg.Add(parallel)
-	for i := 0; i < parallel; i++ {
-		go func() {
-			defer wg.Done()
-			for {
-				var path string
-				var ok bool
-				select {
-				case path, ok = <-chSource:
-					if !ok {
-						return
-					}
-				case <-c.ctx.Done():
-					return
-				}
-				msg, err := upload(path)
-				if err != nil {
-					select {
-					case chResult <- result{err: err}:
-					case <-c.ctx.Done():
-						return
-					}
-				}
-				select {
-				case chResult <- result{message: msg}:
-				case <-c.ctx.Done():
-					return
-				}
-			}
-		}()
-	}
-	go func() {
-		wg.Wait()
-		close(chResult)
-	}()
-
-	var err error
-	for ret := range chResult {
-		if ret.err != nil {
-			c.cmd.PrintErrln("Upload error: ", ret.err)
-			err = ret.err
-			c.cancel()
-		} else {
-			c.cmd.PrintErrln(ret.message)
-		}
-	}
+		c.cmd.PrintErrf("Upload %s to s3://%s/%s\n", src, bucket, key)
+		u.upload()
+		return nil
+	})
+	c.wg.Wait()
 	return err
 }
 
@@ -882,6 +844,222 @@ func (c *client) s3s3recursive(src, dist string) error {
 		}
 	}
 	return err
+}
+
+type uploader struct {
+	client    *client
+	body      io.ReadCloser
+	bucket    string
+	key       string
+	readerPos int64
+	totalSize int64
+
+	mu    sync.Mutex
+	parts completedParts
+}
+
+type completedParts []s3.CompletedPart
+
+func (a completedParts) Len() int      { return len(a) }
+func (a completedParts) Swap(i, j int) { a[i], a[j] = a[j], a[i] }
+func (a completedParts) Less(i, j int) bool {
+	return aws.Int64Value(a[i].PartNumber) < aws.Int64Value(a[j].PartNumber)
+}
+
+func (u *uploader) upload() {
+	u.initSize()
+	r, _, err := u.nextReader()
+	if err == io.EOF {
+		u.singlePartUpload(r)
+		return
+	}
+	if err != nil {
+		u.setError(err)
+		return
+	}
+
+	// start multipart upload
+	resp, err := u.client.s3.CreateMultipartUploadRequest(&s3.CreateMultipartUploadInput{
+		Bucket:             aws.String(u.bucket),
+		Key:                aws.String(u.key),
+		ACL:                u.client.acl,
+		ContentType:        getContentType(u.key),
+		CacheControl:       nullableString(cacheControl),
+		ContentDisposition: nullableString(contentDisposition),
+		ContentEncoding:    nullableString(contentEncoding),
+		ContentLanguage:    nullableString(contentLanguage),
+		Expires:            u.client.expires,
+	}).Send(u.client.ctx)
+	if err != nil {
+		u.setError(err)
+		return
+	}
+	uploadID := aws.StringValue(resp.UploadId)
+
+	var wg sync.WaitGroup
+	num := int64(1)
+	for {
+		if !u.client.acquire() {
+			break
+		}
+		wg.Add(1)
+		go func(uploadID string, num int64, r io.ReadSeeker) {
+			defer u.client.release()
+			defer wg.Done()
+			u.uploadChunk(uploadID, num, r)
+		}(uploadID, num, r)
+		if err == io.EOF {
+			break
+		}
+		num++
+
+		var n int64
+		r, n, err = u.nextReader()
+		if n == 0 {
+			break
+		}
+	}
+
+	// complete
+	u.client.wg.Add(1)
+	go func() {
+		defer u.client.wg.Done()
+		wg.Wait()
+		u.body.Close()
+		if u.client.ctx.Err() != nil {
+			// the request is aborted
+			_, err := u.client.s3.AbortMultipartUploadRequest(&s3.AbortMultipartUploadInput{
+				Bucket:   aws.String(u.bucket),
+				Key:      aws.String(u.key),
+				UploadId: aws.String(uploadID),
+			}).Send(u.client.ctxAbort)
+			if err != nil {
+				u.client.cmd.PrintErrln("failed to abort multipart upload ", err)
+			}
+			return
+		}
+		sort.Sort(u.parts)
+		_, err := u.client.s3.CompleteMultipartUploadRequest(&s3.CompleteMultipartUploadInput{
+			Bucket:          aws.String(u.bucket),
+			Key:             aws.String(u.key),
+			UploadId:        aws.String(uploadID),
+			MultipartUpload: &s3.CompletedMultipartUpload{Parts: u.parts},
+		}).Send(u.client.ctx)
+		if err != nil {
+			u.setError(err)
+		}
+	}()
+}
+
+func (u *uploader) initSize() {
+	u.totalSize = -1
+	switch body := u.body.(type) {
+	case interface{ Stat() (os.FileInfo, error) }:
+		info, err := body.Stat()
+		if err != nil {
+			return
+		}
+		if !info.Mode().IsRegular() {
+			// non-regular file, Size is system-dependent.
+			return
+		}
+		u.totalSize = info.Size()
+	case interface{ Len() int }:
+		u.totalSize = int64(body.Len())
+	case io.Seeker:
+		current, err := body.Seek(0, io.SeekCurrent)
+		if err != nil {
+			return
+		}
+		end, err := body.Seek(0, io.SeekEnd)
+		if err != nil {
+			return
+		}
+		_, err = body.Seek(current, io.SeekStart)
+		if err != nil {
+			return
+		}
+		u.totalSize = end - current
+	}
+}
+
+func (u *uploader) nextReader() (io.ReadSeeker, int64, error) {
+	switch r := u.body.(type) {
+	case io.ReaderAt:
+		var err error
+		n := int64(copyChunkBytes)
+		if u.totalSize >= 0 {
+			remain := u.totalSize - u.readerPos
+			if remain <= n {
+				n = remain
+				err = io.EOF
+			}
+		}
+		reader := io.NewSectionReader(r, u.readerPos, n)
+		return reader, n, err
+	}
+
+	var buf bytes.Buffer
+	chunk := &io.LimitedReader{
+		R: u.body,
+		N: copyChunkBytes,
+	}
+	n, err := buf.ReadFrom(chunk)
+	u.readerPos += n
+	return bytes.NewReader(buf.Bytes()), n, err
+}
+
+func (u *uploader) singlePartUpload(r io.ReadSeeker) {
+	if !u.client.acquire() {
+		return
+	}
+	go func() {
+		defer u.client.release()
+		defer u.body.Close()
+		input := &s3.PutObjectInput{
+			Body:               r,
+			Bucket:             aws.String(u.bucket),
+			Key:                aws.String(u.key),
+			ACL:                u.client.acl,
+			ContentType:        getContentType(u.key),
+			CacheControl:       nullableString(cacheControl),
+			ContentDisposition: nullableString(contentDisposition),
+			ContentEncoding:    nullableString(contentEncoding),
+			ContentLanguage:    nullableString(contentLanguage),
+			Expires:            u.client.expires,
+		}
+		_, err := u.client.s3.PutObjectRequest(input).Send(u.client.ctx)
+		if err != nil {
+			u.setError(err)
+		}
+	}()
+}
+
+func (u *uploader) uploadChunk(uploadID string, num int64, r io.ReadSeeker) {
+	resp, err := u.client.s3.UploadPartRequest(&s3.UploadPartInput{
+		Bucket:     aws.String(u.bucket),
+		Key:        aws.String(u.key),
+		Body:       r,
+		UploadId:   aws.String(uploadID),
+		PartNumber: aws.Int64(num),
+	}).Send(u.client.ctx)
+	if err != nil {
+		u.setError(err)
+		return
+	}
+	part := s3.CompletedPart{ETag: resp.ETag, PartNumber: aws.Int64(num)}
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	u.parts = append(u.parts, part)
+}
+
+func (u *uploader) setError(err error) {
+	select {
+	case <-u.client.ctx.Done():
+	default:
+	}
+	u.client.cancel()
+	u.client.cmd.PrintErrln(err)
 }
 
 func parsePath(path string) (bucket, key string) {

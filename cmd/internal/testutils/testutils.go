@@ -40,15 +40,15 @@ func CreateTemporaryBucket(ctx context.Context, svc s3iface.ClientAPI) (string, 
 	}
 
 	// wait for the bucket is visible
-	time.Sleep(time.Second)
-	for i := 0; i < 5; i++ {
+	time.Sleep(5 * time.Second)
+	for i := 0; i < 60; i++ {
 		_, err := svc.HeadBucketRequest(&s3.HeadBucketInput{
 			Bucket: aws.String(bucketName),
 		}).Send(ctx)
 		if err == nil {
 			return bucketName, nil
 		}
-		time.Sleep(time.Second)
+		time.Sleep(10 * time.Second)
 	}
 	return bucketName, nil
 }
