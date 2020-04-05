@@ -294,125 +294,46 @@ func (c *client) handleSignal() {
 }
 
 func (c *client) locals3recursive(src, dist string) error {
-	type result struct {
-		message string
-		err     error
-	}
-	var wg sync.WaitGroup
-	chSource := make(chan string, parallel)
-	chResult := make(chan result, parallel)
-
-	// walk local file system
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		defer close(chSource)
-		if err := fastwalk.Walk(src, func(path string, typ os.FileMode) error {
-			info, err := os.Stat(path)
-			if err != nil {
-				return err
-			}
-			if info.IsDir() {
-				if typ == os.ModeSymlink && c.followSymlinks {
-					return fastwalk.TraverseLink
-				}
-				return nil
-			}
-			select {
-			case chSource <- path:
-			case <-c.ctx.Done():
-				return c.ctx.Err()
+	err := fastwalk.Walk(src, func(p string, typ os.FileMode) error {
+		info, err := os.Stat(p)
+		if err != nil {
+			return err
+		}
+		if info.IsDir() {
+			if typ == os.ModeSymlink && c.followSymlinks {
+				return fastwalk.TraverseLink
 			}
 			return nil
-		}); err != nil {
-			select {
-			case chResult <- result{err: err}:
-			case <-c.ctx.Done():
-			}
 		}
-	}()
 
-	// upload workers
-	upload := func(p string) (string, error) {
 		bucket, key := parsePath(dist)
 		rel, err := filepath.Rel(src, p)
 		if err != nil {
-			return "", err
+			return err
 		}
 		key = path.Join(key, filepath.ToSlash(rel))
 		if dryrun {
-			return fmt.Sprintf("upload %s to s3://%s/%s", p, bucket, key), nil
+			c.cmd.PrintErrf("Upload %s to s3://%s/%s\n", src, bucket, key)
+			return nil
 		}
-		f, err := os.Open(p)
+
+		f, err := os.Open(src)
 		if err != nil {
-			return "", err
+			return err
 		}
 		defer f.Close()
 
-		input := &s3manager.UploadInput{
-			Body:               f,
-			Bucket:             aws.String(bucket),
-			Key:                aws.String(key),
-			ACL:                c.acl,
-			ContentType:        getContentType(key),
-			CacheControl:       nullableString(cacheControl),
-			ContentDisposition: nullableString(contentDisposition),
-			ContentEncoding:    nullableString(contentEncoding),
-			ContentLanguage:    nullableString(contentLanguage),
-			Expires:            c.expires,
+		u := &uploader{
+			client: c,
+			body:   f,
+			bucket: bucket,
+			key:    key,
 		}
-		_, err = c.uploader.UploadWithContext(c.ctx, input)
-		if err != nil {
-			return "", err
-		}
-		return fmt.Sprintf("upload %s to s3://%s/%s", p, bucket, key), nil
-	}
-	wg.Add(parallel)
-	for i := 0; i < parallel; i++ {
-		go func() {
-			defer wg.Done()
-			for {
-				var path string
-				var ok bool
-				select {
-				case path, ok = <-chSource:
-					if !ok {
-						return
-					}
-				case <-c.ctx.Done():
-					return
-				}
-				msg, err := upload(path)
-				if err != nil {
-					select {
-					case chResult <- result{err: err}:
-					case <-c.ctx.Done():
-						return
-					}
-				}
-				select {
-				case chResult <- result{message: msg}:
-				case <-c.ctx.Done():
-					return
-				}
-			}
-		}()
-	}
-	go func() {
-		wg.Wait()
-		close(chResult)
-	}()
-
-	var err error
-	for ret := range chResult {
-		if ret.err != nil {
-			c.cmd.PrintErrln("Upload error: ", ret.err)
-			err = ret.err
-			c.cancel()
-		} else {
-			c.cmd.PrintErrln(ret.message)
-		}
-	}
+		c.cmd.PrintErrf("Upload %s to s3://%s/%s\n", src, bucket, key)
+		u.upload()
+		return nil
+	})
+	c.wg.Wait()
 	return err
 }
 
@@ -983,11 +904,11 @@ func (u *uploader) upload() {
 			break
 		}
 		wg.Add(1)
-		go func() {
+		go func(uploadID string, num int64, r io.ReadSeeker) {
 			defer u.client.release()
 			defer wg.Done()
 			u.uploadChunk(uploadID, num, r)
-		}()
+		}(uploadID, num, r)
 		if err == io.EOF {
 			break
 		}
