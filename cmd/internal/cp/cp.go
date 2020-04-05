@@ -1032,7 +1032,6 @@ func (u *uploader) singlePartUpload(r io.ReadSeeker) {
 			u.setError(err)
 		}
 	}()
-	return
 }
 
 func (u *uploader) uploadChunk(uploadID string, num int64, r io.ReadSeeker) {
