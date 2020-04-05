@@ -52,6 +52,10 @@ func (c *client) s3s3recursive(src, dist string) error {
 		for _, obj := range page.Contents {
 			key := aws.StringValue(obj.Key)
 			distKey := path.Join(distKey, strings.TrimPrefix(key, srcKey))
+			c.cmd.PrintErrf("copy s3://%s/%s to s3://%s/%s\n", srcBucket, key, distBucket, distKey)
+			if dryrun {
+				continue
+			}
 			cp := &copier{
 				client:     c,
 				srcBucket:  srcBucket,
