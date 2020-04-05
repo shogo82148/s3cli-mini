@@ -322,7 +322,7 @@ func (c *client) locals3recursive(src, dist string) error {
 			return nil
 		}
 
-		f, err := os.Open(src)
+		f, err := os.Open(p)
 		if err != nil {
 			return err
 		}
@@ -965,7 +965,8 @@ func (u *uploader) initSize() {
 		if err != nil {
 			return
 		}
-		if (info.Mode() & os.ModeType) != 0 {
+		log.Println(info.Mode())
+		if !info.Mode().IsRegular() {
 			// non-regular file, Size is system-dependent.
 			return
 		}
