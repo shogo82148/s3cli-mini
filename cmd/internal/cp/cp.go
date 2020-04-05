@@ -279,7 +279,6 @@ func (c *client) locals3(src, dist string) error {
 	if err != nil {
 		return err
 	}
-	defer f.Close()
 
 	u := &uploader{
 		client: c,
@@ -321,7 +320,6 @@ func (c *client) locals3recursive(src, dist string) error {
 		if err != nil {
 			return err
 		}
-		defer f.Close()
 
 		u := &uploader{
 			client: c,
@@ -849,7 +847,7 @@ func (c *client) s3s3recursive(src, dist string) error {
 
 type uploader struct {
 	client    *client
-	body      io.Reader
+	body      io.ReadCloser
 	bucket    string
 	key       string
 	readerPos int64
@@ -926,6 +924,7 @@ func (u *uploader) upload() {
 	go func() {
 		defer u.client.wg.Done()
 		wg.Wait()
+		u.body.Close()
 		if u.client.ctx.Err() != nil {
 			// the request is aborted
 			_, err := u.client.s3.AbortMultipartUploadRequest(&s3.AbortMultipartUploadInput{
@@ -1015,6 +1014,7 @@ func (u *uploader) singlePartUpload(r io.ReadSeeker) {
 	}
 	go func() {
 		defer u.client.release()
+		defer u.body.Close()
 		input := &s3.PutObjectInput{
 			Body:               r,
 			Bucket:             aws.String(u.bucket),
