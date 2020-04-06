@@ -28,7 +28,7 @@ import (
 )
 
 // Version is the version of s3cli-mini
-const Version = "0.0.4"
+const Version = "0.0.5"
 
 // versionCmd represents the cp command
 var versionCmd = &cobra.Command{
