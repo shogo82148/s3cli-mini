@@ -3,6 +3,7 @@ package cp
 import (
 	"bytes"
 	"context"
+	"io"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -710,5 +711,54 @@ func TestCP_DownloadStdout(t *testing.T) {
 	}
 	if string(got) != string(content) {
 		t.Errorf("want %s, got %s", string(content), string(got))
+	}
+}
+
+func TestCP_UploadStdin(t *testing.T) {
+	testutils.SkipIfUnitTest(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	svc, err := config.NewS3Client()
+	if err != nil {
+		t.Fatal(err)
+	}
+	bucketName, err := testutils.CreateTemporaryBucket(ctx, svc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer testutils.DeleteBucket(context.Background(), svc, bucketName)
+
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer r.Close()
+	go func() {
+		io.WriteString(w, "temporary file's content")
+		w.Close()
+	}()
+	origStdin := os.Stdin
+	defer func() { os.Stdin = origStdin }() // restore stdin
+	os.Stdin = r
+
+	cmd := &cobra.Command{}
+	Run(cmd, []string{"-", "s3://" + bucketName + "/tmpfile"})
+
+	// check body
+	resp, err := svc.GetObjectRequest(&s3.GetObjectInput{
+		Bucket: aws.String(bucketName),
+		Key:    aws.String("tmpfile"),
+	}).Send(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if string(body) != "temporary file's content" {
+		t.Errorf("want %s, got %s", "temporary file's content", string(body))
 	}
 }
