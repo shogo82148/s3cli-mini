@@ -32,6 +32,7 @@ var maxCopyObjectBytes = int64(5 * 1024 * 1024 * 1024)
 const copyChunkBytes = 5 * 1024 * 1024
 
 const distStdout = "-"
+const srcStdin = "-"
 
 var dryrun bool
 var parallel int

@@ -14,10 +14,29 @@ import (
 	"github.com/shogo82148/s3cli-mini/internal/fastwalk"
 )
 
+func (c *client) stdins3(bucket, key string) error {
+	if dryrun {
+		c.cmd.PrintErrf("upload STDIN to s3://%s/%s\n", bucket, key)
+		return nil
+	}
+	u := &uploader{
+		client: c,
+		body:   os.Stdin,
+		bucket: bucket,
+		key:    key,
+	}
+	u.upload()
+	c.wg.Wait()
+	return c.ctx.Err()
+}
+
 func (c *client) locals3(src, dist string) error {
 	bucket, key := parsePath(dist)
 	if key == "" || key[len(key)-1] == '/' {
 		key += filepath.Base(src)
+	}
+	if src == srcStdin {
+		return c.stdins3(bucket, key)
 	}
 	if dryrun {
 		c.cmd.PrintErrf("Upload %s to s3://%s/%s\n", src, bucket, key)
@@ -223,19 +242,18 @@ func (u *uploader) initSize() {
 }
 
 func (u *uploader) nextReader() (io.ReadSeeker, int64, error) {
-	switch r := u.body.(type) {
-	case io.ReaderAt:
-		var err error
-		n := int64(copyChunkBytes)
-		if u.totalSize >= 0 {
-			remain := u.totalSize - u.readerPos
-			if remain <= n {
+	if u.totalSize >= 0 {
+		switch r := u.body.(type) {
+		case io.ReaderAt:
+			var err error
+			n := int64(copyChunkBytes)
+			if remain := u.totalSize - u.readerPos; remain <= n {
 				n = remain
 				err = io.EOF
 			}
+			reader := io.NewSectionReader(r, u.readerPos, n)
+			return reader, n, err
 		}
-		reader := io.NewSectionReader(r, u.readerPos, n)
-		return reader, n, err
 	}
 
 	var buf bytes.Buffer
