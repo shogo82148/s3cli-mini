@@ -689,28 +689,35 @@ func TestCP_DownloadStdout(t *testing.T) {
 	}
 
 	// test
-	dir, err := ioutil.TempDir("", "s3cli-mini")
+	r, w, err := os.Pipe()
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer os.RemoveAll(dir)
-	filename := filepath.Join(dir, "tmpfile")
+	ch := make(chan struct {
+		str string
+		err error
+	}, 1)
+	go func() {
+		data, err := ioutil.ReadAll(r)
+		ch <- struct {
+			str string
+			err error
+		}{string(data), err}
+	}()
 	origStdout := os.Stdout
 	defer func() { os.Stdout = origStdout }() // restore stdout
+	os.Stdout = w
 
-	os.Stdout, err = os.OpenFile(filename, os.O_RDWR|os.O_CREATE, 0600)
-	if err != nil {
-		t.Fatal(err)
-	}
 	cmd := &cobra.Command{}
 	Run(cmd, []string{"s3://" + bucketName + "/tmpfile", "-"})
+	w.Close()
 
-	got, err := ioutil.ReadFile(filename)
-	if err != nil {
+	got := <-ch
+	if got.err != nil {
 		t.Fatal(err)
 	}
-	if string(got) != string(content) {
-		t.Errorf("want %s, got %s", string(content), string(got))
+	if string(got.str) != string(content) {
+		t.Errorf("want %s, got %s", string(content), string(got.str))
 	}
 }
 
