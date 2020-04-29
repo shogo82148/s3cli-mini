@@ -252,6 +252,7 @@ func (u *uploader) nextReader() (io.ReadSeeker, int64, error) {
 				err = io.EOF
 			}
 			reader := io.NewSectionReader(r, u.readerPos, n)
+			u.readerPos += n
 			return reader, n, err
 		}
 	}
