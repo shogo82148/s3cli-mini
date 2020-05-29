@@ -3,7 +3,7 @@ module github.com/shogo82148/s3cli-mini
 go 1.13
 
 require (
-	github.com/aws/aws-sdk-go-v2 v0.22.0
+	github.com/aws/aws-sdk-go-v2 v0.23.0
 	github.com/fsnotify/fsnotify v1.4.9 // indirect
 	github.com/jmespath/go-jmespath v0.3.0 // indirect
 	github.com/mitchellh/go-homedir v1.1.0
