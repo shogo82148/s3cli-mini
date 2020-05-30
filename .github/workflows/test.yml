@@ -52,7 +52,7 @@ jobs:
         with:
           path-to-profile: profile.cov
           parallel: true
-          job-number: ${{ strategy.job-index }}
+          flag-name: ${{ matrix.os }}
 
   # notifies that all test jobs are finished.
   finish:
