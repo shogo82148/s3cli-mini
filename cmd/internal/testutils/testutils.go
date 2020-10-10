@@ -10,7 +10,7 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
-	"github.com/aws/aws-sdk-go-v2/service/s3/s3iface"
+	"github.com/shogo82148/s3cli-mini/internal/s3iface"
 )
 
 func bucketPrefix() string {
@@ -25,16 +25,16 @@ func SkipIfUnitTest(t *testing.T) {
 }
 
 // CreateTemporaryBucket creates a temporary S3 bucket.
-func CreateTemporaryBucket(ctx context.Context, svc s3iface.ClientAPI) (string, error) {
+func CreateTemporaryBucket(ctx context.Context, svc s3iface.Interface) (string, error) {
 	var b [8]byte
 	if _, err := rand.Read(b[:]); err != nil {
 		return "", err
 	}
 	bucketName := bucketPrefix() + hex.EncodeToString(b[:])
 
-	_, err := svc.CreateBucketRequest(&s3.CreateBucketInput{
+	_, err := svc.CreateBucket(ctx, &s3.CreateBucketInput{
 		Bucket: aws.String(bucketName),
-	}).Send(ctx)
+	})
 	if err != nil {
 		return "", err
 	}
@@ -42,9 +42,9 @@ func CreateTemporaryBucket(ctx context.Context, svc s3iface.ClientAPI) (string, 
 	// wait for the bucket is visible
 	time.Sleep(5 * time.Second)
 	for i := 0; i < 60; i++ {
-		_, err := svc.HeadBucketRequest(&s3.HeadBucketInput{
+		_, err := svc.HeadBucket(ctx, &s3.HeadBucketInput{
 			Bucket: aws.String(bucketName),
-		}).Send(ctx)
+		})
 		if err == nil {
 			return bucketName, nil
 		}
@@ -54,26 +54,30 @@ func CreateTemporaryBucket(ctx context.Context, svc s3iface.ClientAPI) (string, 
 }
 
 // DeleteBucket deletes a S3 bucket.
-func DeleteBucket(ctx context.Context, svc s3iface.ClientAPI, bucketName string) error {
-	req := svc.ListObjectsV2Request(&s3.ListObjectsV2Input{
-		Bucket: aws.String(bucketName),
-	})
-	p := s3.NewListObjectsV2Paginator(req)
-	for p.Next(ctx) {
-		page := p.CurrentPage()
+func DeleteBucket(ctx context.Context, svc s3iface.Interface, bucketName string) error {
+	var token *string
+	for {
+		page, err := svc.ListObjectsV2(ctx, &s3.ListObjectsV2Input{
+			Bucket: aws.String(bucketName),
+			ContinuationToken: token,
+		})
+		if err != nil {
+			return err
+		}
 		for _, obj := range page.Contents {
-			svc.DeleteObjectRequest(&s3.DeleteObjectInput{
+			svc.DeleteObject(ctx, &s3.DeleteObjectInput{
 				Bucket: aws.String(bucketName),
 				Key:    obj.Key,
-			}).Send(ctx)
+			})
 		}
-	}
-	if err := p.Err(); err != nil {
-		return err
+		if page.ContinuationToken == nil {
+			break
+		}
+		token = page.ContinuationToken
 	}
 
-	_, err := svc.DeleteBucketRequest(&s3.DeleteBucketInput{
+	_, err := svc.DeleteBucket(ctx, &s3.DeleteBucketInput{
 		Bucket: aws.String(bucketName),
-	}).Send(ctx)
+	})
 	return err
 }

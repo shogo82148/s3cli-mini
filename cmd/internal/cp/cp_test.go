@@ -12,6 +12,7 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 	"github.com/shogo82148/s3cli-mini/cmd/internal/config"
 	"github.com/shogo82148/s3cli-mini/cmd/internal/testutils"
 	"github.com/spf13/cobra"
@@ -49,10 +50,10 @@ func TestCP_Upload(t *testing.T) {
 	cmd := &cobra.Command{}
 	Run(cmd, []string{filename, "s3://" + bucketName + "/tmpfile.html"})
 
-	resp, err := svc.GetObjectRequest(&s3.GetObjectInput{
+	resp, err := svc.GetObject(ctx, &s3.GetObjectInput{
 		Bucket: aws.String(bucketName),
 		Key:    aws.String("tmpfile.html"),
-	}).Send(ctx)
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -66,21 +67,21 @@ func TestCP_Upload(t *testing.T) {
 	if string(body) != string(content) {
 		t.Errorf("want %s, got %s", string(content), string(body))
 	}
-	if aws.StringValue(resp.ContentType) != "text/html; charset=utf-8" {
-		t.Errorf("unexpected content-type: want %s, got %s", "text/html; charset-utf-8", aws.StringValue(resp.ContentType))
+	if aws.ToString(resp.ContentType) != "text/html; charset=utf-8" {
+		t.Errorf("unexpected content-type: want %s, got %s", "text/html; charset-utf-8", aws.ToString(resp.ContentType))
 	}
 
 	// check acl
-	retACL, err := svc.GetObjectAclRequest(&s3.GetObjectAclInput{
+	retACL, err := svc.GetObjectAcl(ctx, &s3.GetObjectAclInput{
 		Bucket: aws.String(bucketName),
 		Key:    aws.String("tmpfile.html"),
-	}).Send(ctx)
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	for _, g := range retACL.Grants {
-		if g.Grantee.Type != s3.TypeCanonicalUser {
-			t.Errorf("unexpected grantee type, want %s, got %s", s3.TypeCanonicalUser, g.Grantee.Type)
+		if g.Grantee.Type != types.TypeCanonicaluser {
+			t.Errorf("unexpected grantee type, want %s, got %s", types.TypeCanonicaluser, g.Grantee.Type)
 		}
 	}
 }
@@ -116,10 +117,10 @@ func TestCP_Upload_Multipart(t *testing.T) {
 	cmd := &cobra.Command{}
 	Run(cmd, []string{filename, "s3://" + bucketName + "/tmpfile.html"})
 
-	resp, err := svc.GetObjectRequest(&s3.GetObjectInput{
+	resp, err := svc.GetObject(ctx, &s3.GetObjectInput{
 		Bucket: aws.String(bucketName),
 		Key:    aws.String("tmpfile.html"),
-	}).Send(ctx)
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -133,21 +134,21 @@ func TestCP_Upload_Multipart(t *testing.T) {
 	if string(body) != string(content) {
 		t.Errorf("want %s, got %s", string(content), string(body))
 	}
-	if aws.StringValue(resp.ContentType) != "text/html; charset=utf-8" {
-		t.Errorf("unexpected content-type: want %s, got %s", "text/html; charset-utf-8", aws.StringValue(resp.ContentType))
+	if aws.ToString(resp.ContentType) != "text/html; charset=utf-8" {
+		t.Errorf("unexpected content-type: want %s, got %s", "text/html; charset-utf-8", aws.ToString(resp.ContentType))
 	}
 
 	// check acl
-	retACL, err := svc.GetObjectAclRequest(&s3.GetObjectAclInput{
+	retACL, err := svc.GetObjectAcl(ctx, &s3.GetObjectAclInput{
 		Bucket: aws.String(bucketName),
 		Key:    aws.String("tmpfile.html"),
-	}).Send(ctx)
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	for _, g := range retACL.Grants {
-		if g.Grantee.Type != s3.TypeCanonicalUser {
-			t.Errorf("unexpected grantee type, want %s, got %s", s3.TypeCanonicalUser, g.Grantee.Type)
+		if g.Grantee.Type != types.TypeCanonicaluser {
+			t.Errorf("unexpected grantee type, want %s, got %s",types.TypeCanonicaluser, g.Grantee.Type)
 		}
 	}
 }
@@ -183,10 +184,10 @@ func TestCP_Upload_KeyOmitted(t *testing.T) {
 	cmd := &cobra.Command{}
 	Run(cmd, []string{filename, "s3://" + bucketName})
 
-	resp, err := svc.GetObjectRequest(&s3.GetObjectInput{
+	resp, err := svc.GetObject(ctx, &s3.GetObjectInput{
 		Bucket: aws.String(bucketName),
 		Key:    aws.String("tmpfile"),
-	}).Send(ctx)
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -235,10 +236,10 @@ func TestCP_UploadPublicACL(t *testing.T) {
 	cmd := &cobra.Command{}
 	Run(cmd, []string{filename, "s3://" + bucketName + "/tmpfile"})
 
-	resp, err := svc.GetObjectRequest(&s3.GetObjectInput{
+	resp, err := svc.GetObject(ctx, &s3.GetObjectInput{
 		Bucket: aws.String(bucketName),
 		Key:    aws.String("tmpfile"),
-	}).Send(ctx)
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -254,19 +255,19 @@ func TestCP_UploadPublicACL(t *testing.T) {
 	}
 
 	// check acl
-	retACL, err := svc.GetObjectAclRequest(&s3.GetObjectAclInput{
+	retACL, err := svc.GetObjectAcl(ctx, &s3.GetObjectAclInput{
 		Bucket: aws.String(bucketName),
 		Key:    aws.String("tmpfile"),
-	}).Send(ctx)
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	var publicRead bool
 	for _, g := range retACL.Grants {
 		publicRead = publicRead ||
-			(g.Grantee.Type == s3.TypeGroup &&
-				aws.StringValue(g.Grantee.URI) == "http://acs.amazonaws.com/groups/global/AllUsers" &&
-				g.Permission == s3.PermissionRead)
+			(g.Grantee.Type == types.TypeGroup &&
+				aws.ToString(g.Grantee.URI) == "http://acs.amazonaws.com/groups/global/AllUsers" &&
+				g.Permission == types.PermissionRead)
 	}
 	if !publicRead {
 		t.Error("unexpected acl: want public-read, but not")
@@ -328,10 +329,10 @@ func TestCP_Upload_recursive(t *testing.T) {
 
 	// check body
 	for _, key := range keys {
-		resp, err := svc.GetObjectRequest(&s3.GetObjectInput{
+		resp, err := svc.GetObject(ctx, &s3.GetObjectInput{
 			Bucket: aws.String(bucketName),
 			Key:    aws.String(key),
-		}).Send(ctx)
+		})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -363,11 +364,11 @@ func TestCP_Download(t *testing.T) {
 
 	// prepare a test object
 	content := []byte("temporary file's content")
-	_, err = svc.PutObjectRequest(&s3.PutObjectInput{
+	_, err = svc.PutObject(ctx, &s3.PutObjectInput{
 		Body:   bytes.NewReader(content),
 		Bucket: aws.String(bucketName),
 		Key:    aws.String("tmpfile"),
-	}).Send(ctx)
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -426,11 +427,11 @@ func TestCP_DownloadRecursive(t *testing.T) {
 		"z.txt",
 	}
 	for _, key := range keys {
-		_, err = svc.PutObjectRequest(&s3.PutObjectInput{
+		_, err = svc.PutObject(ctx, &s3.PutObjectInput{
 			Body:   bytes.NewReader(content),
 			Bucket: aws.String(bucketName),
 			Key:    aws.String(key),
-		}).Send(ctx)
+		})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -473,11 +474,11 @@ func TestCP_Copy(t *testing.T) {
 
 	// prepare a test object
 	content := []byte("temporary file's content")
-	_, err = svc.PutObjectRequest(&s3.PutObjectInput{
+	_, err = svc.PutObject(ctx, &s3.PutObjectInput{
 		Body:   bytes.NewReader(content),
 		Bucket: aws.String(bucketName),
 		Key:    aws.String("tmpfile"),
-	}).Send(ctx)
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -486,10 +487,10 @@ func TestCP_Copy(t *testing.T) {
 	Run(cmd, []string{"s3://" + bucketName + "/tmpfile", "s3://" + bucketName + "/tmpfile.copy"})
 
 	// check body
-	resp, err := svc.GetObjectRequest(&s3.GetObjectInput{
+	resp, err := svc.GetObject(ctx, &s3.GetObjectInput{
 		Bucket: aws.String(bucketName),
 		Key:    aws.String("tmpfile.copy"),
-	}).Send(ctx)
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -520,11 +521,11 @@ func TestCP_CopyMultipart(t *testing.T) {
 
 	// prepare a test object
 	content := bytes.Repeat([]byte("temporary file's content"), 1024*1024)
-	_, err = svc.PutObjectRequest(&s3.PutObjectInput{
+	_, err = svc.PutObject(ctx, &s3.PutObjectInput{
 		Body:   bytes.NewReader(content),
 		Bucket: aws.String(bucketName),
 		Key:    aws.String("tmpfile"),
-	}).Send(ctx)
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -538,10 +539,10 @@ func TestCP_CopyMultipart(t *testing.T) {
 	Run(cmd, []string{"s3://" + bucketName + "/tmpfile", "s3://" + bucketName + "/tmpfile.copy"})
 
 	// check body
-	resp, err := svc.GetObjectRequest(&s3.GetObjectInput{
+	resp, err := svc.GetObject(ctx, &s3.GetObjectInput{
 		Bucket: aws.String(bucketName),
 		Key:    aws.String("tmpfile.copy"),
-	}).Send(ctx)
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -590,11 +591,11 @@ func TestCP_CopyRecursive(t *testing.T) {
 		"z.txt",
 	}
 	for _, key := range keys {
-		_, err := svc.PutObjectRequest(&s3.PutObjectInput{
+		_, err := svc.PutObject(ctx, &s3.PutObjectInput{
 			Body:   bytes.NewReader(content),
 			Bucket: aws.String(bucketName),
 			Key:    aws.String(key),
-		}).Send(ctx)
+		})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -621,10 +622,10 @@ func TestCP_CopyRecursive(t *testing.T) {
 		"fizz/bar/.baz/hooks/foo",
 	}
 	for _, key := range expected {
-		resp, err := svc.GetObjectRequest(&s3.GetObjectInput{
+		resp, err := svc.GetObject(ctx, &s3.GetObjectInput{
 			Bucket: aws.String(bucketName),
 			Key:    aws.String(key),
-		}).Send(ctx)
+		})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -672,11 +673,11 @@ func TestCP_CopyRecursiveMultipart(t *testing.T) {
 		for _, key := range keys {
 			key := key
 			g.Go(func() error {
-				_, err := svc.PutObjectRequest(&s3.PutObjectInput{
+				_, err := svc.PutObject(ctx, &s3.PutObjectInput{
 					Body:   bytes.NewReader(content),
 					Bucket: aws.String(bucketName),
 					Key:    aws.String(key),
-				}).Send(ctx)
+				})
 				return err
 			})
 		}
@@ -705,10 +706,10 @@ func TestCP_CopyRecursiveMultipart(t *testing.T) {
 		for _, key := range expected {
 			key := key
 			g.Go(func() error {
-				resp, err := svc.GetObjectRequest(&s3.GetObjectInput{
+				resp, err := svc.GetObject(ctx, &s3.GetObjectInput{
 					Bucket: aws.String(bucketName),
 					Key:    aws.String(key),
-				}).Send(ctx)
+				})
 				if err != nil {
 					t.Errorf("error while getting %s: %v", key, err)
 					return nil
@@ -746,11 +747,11 @@ func TestCP_DownloadStdout(t *testing.T) {
 
 	// prepare a test object
 	content := []byte("temporary file's content")
-	_, err = svc.PutObjectRequest(&s3.PutObjectInput{
+	_, err = svc.PutObject(ctx, &s3.PutObjectInput{
 		Body:   bytes.NewReader(content),
 		Bucket: aws.String(bucketName),
 		Key:    aws.String("tmpfile"),
-	}).Send(ctx)
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -820,10 +821,10 @@ func TestCP_UploadStdin(t *testing.T) {
 	Run(cmd, []string{"-", "s3://" + bucketName + "/tmpfile"})
 
 	// check body
-	resp, err := svc.GetObjectRequest(&s3.GetObjectInput{
+	resp, err := svc.GetObject(ctx, &s3.GetObjectInput{
 		Bucket: aws.String(bucketName),
 		Key:    aws.String("tmpfile"),
-	}).Send(ctx)
+	})
 	if err != nil {
 		t.Fatal(err)
 	}

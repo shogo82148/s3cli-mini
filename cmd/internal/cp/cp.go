@@ -16,10 +16,9 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
-	"github.com/aws/aws-sdk-go-v2/service/s3/s3iface"
-	"github.com/aws/aws-sdk-go-v2/service/s3/s3manager"
-	"github.com/aws/aws-sdk-go-v2/service/s3/s3manager/s3manageriface"
+	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 	"github.com/shogo82148/s3cli-mini/cmd/internal/config"
+	"github.com/shogo82148/s3cli-mini/internal/s3iface"
 	"github.com/spf13/cobra"
 )
 
@@ -77,11 +76,9 @@ type client struct {
 	wg             sync.WaitGroup
 	semaphore      chan struct{}
 	cmd            *cobra.Command
-	s3             s3iface.ClientAPI
-	uploader       s3manageriface.UploaderAPI
-	downloader     s3manageriface.DownloaderAPI
+	s3             s3iface.Interface
 	followSymlinks bool
-	acl            s3.ObjectCannedACL
+	acl            types.ObjectCannedACL
 	expires        *time.Time
 }
 
@@ -131,24 +128,24 @@ func Run(cmd *cobra.Command, args []string) {
 	c.Run(args[0], args[1])
 }
 
-func parseACL(acl string) (s3.ObjectCannedACL, error) {
+func parseACL(acl string) (types.ObjectCannedACL, error) {
 	switch acl {
 	case "":
 		return "", nil
 	case "private":
-		return s3.ObjectCannedACLPrivate, nil
+		return types.ObjectCannedACLPrivate, nil
 	case "public-read":
-		return s3.ObjectCannedACLPublicRead, nil
+		return types.ObjectCannedACLPublicRead, nil
 	case "public-read-write":
-		return s3.ObjectCannedACLPublicReadWrite, nil
+		return types.ObjectCannedACLPublicReadWrite, nil
 	case "authenticated-read":
-		return s3.ObjectCannedACLAuthenticatedRead, nil
+		return types.ObjectCannedACLAuthenticatedRead, nil
 	case "aws-exec-read":
-		return s3.ObjectCannedACLAwsExecRead, nil
+		return types.ObjectCannedACLAwsExecRead, nil
 	case "bucket-owner-read":
-		return s3.ObjectCannedACLBucketOwnerRead, nil
+		return types.ObjectCannedACLBucketOwnerRead, nil
 	case "bucket-owner-full-control":
-		return s3.ObjectCannedACLBucketOwnerFullControl, nil
+		return types.ObjectCannedACLBucketOwnerFullControl, nil
 	}
 	return "", fmt.Errorf("unknown acl: %s", acl)
 }
@@ -180,8 +177,6 @@ func (c *client) Run(src, dist string) {
 		os.Exit(1)
 	}
 	c.s3 = svc
-	c.uploader = s3manager.NewUploaderWithClient(svc)
-	c.downloader = s3manager.NewDownloaderWithClient(svc)
 
 	if recursive {
 		switch {
@@ -267,14 +262,14 @@ func (c *client) s3stdout(bucket, key string) error {
 		c.cmd.PrintErrf("download s3://%s/%s to STDOUT\n", bucket, key)
 		return nil
 	}
-	res, err := c.s3.GetObjectRequest(&s3.GetObjectInput{
+	res, err := c.s3.GetObject(c.ctx, &s3.GetObjectInput{
 		Bucket: aws.String(bucket),
 		Key:    aws.String(key),
-	}).Send(c.ctx)
+	})
 	if err != nil {
 		return err
 	}
-	body := res.GetObjectOutput.Body
+	body := res.Body
 	defer body.Close()
 	if _, err := io.Copy(os.Stdout, body); err != nil {
 		return err
@@ -303,10 +298,11 @@ func (c *client) s3local(src, dist string) error {
 	if err != nil {
 		return err
 	}
-	_, err = c.downloader.DownloadWithContext(c.ctx, f, &s3.GetObjectInput{
-		Bucket: aws.String(bucket),
-		Key:    aws.String(key),
-	})
+	// TODO: implement me!
+	// _, err = c.downloader.DownloadWithContext(c.ctx, f, &s3.GetObjectInput{
+	// 	Bucket: aws.String(bucket),
+	// 	Key:    aws.String(key),
+	// })
 	if err != nil {
 		return err
 	}
@@ -335,26 +331,30 @@ func (c *client) s3localrecursive(src, dist string) error {
 	go func() {
 		defer wg.Done()
 		defer close(chSource)
-		req := c.s3.ListObjectsV2Request(&s3.ListObjectsV2Input{
-			Bucket: aws.String(bucket),
-			Prefix: aws.String(key),
-		})
-		p := s3.NewListObjectsV2Paginator(req)
-		for p.Next(c.ctx) {
-			page := p.CurrentPage()
+		var token *string
+		for {
+			page, err := c.s3.ListObjectsV2(c.ctx, &s3.ListObjectsV2Input{
+				Bucket:            aws.String(bucket),
+				Prefix:            aws.String(key),
+				ContinuationToken: token,
+			})
+			if err != nil {
+				select {
+				case chResult <- result{err: err}:
+				case <-c.ctx.Done():
+				}
+				return
+			}
 			for _, obj := range page.Contents {
 				select {
-				case chSource <- aws.StringValue(obj.Key):
+				case chSource <- aws.ToString(obj.Key):
 				case <-c.ctx.Done():
 					return
 				}
 			}
-		}
-		if err := p.Err(); err != nil {
-			select {
-			case chResult <- result{err: err}:
-			case <-c.ctx.Done():
-				return
+			token = page.ContinuationToken
+			if token == nil {
+				break
 			}
 		}
 	}()
@@ -373,10 +373,11 @@ func (c *client) s3localrecursive(src, dist string) error {
 		if err != nil {
 			return "", err
 		}
-		_, err = c.downloader.DownloadWithContext(c.ctx, f, &s3.GetObjectInput{
-			Bucket: aws.String(bucket),
-			Key:    aws.String(p),
-		})
+		// TODO: implement me!
+		// _, err = c.downloader.DownloadWithContext(c.ctx, f, &s3.GetObjectInput{
+		// 	Bucket: aws.String(bucket),
+		// 	Key:    aws.String(p),
+		// })
 		if err != nil {
 			return "", err
 		}

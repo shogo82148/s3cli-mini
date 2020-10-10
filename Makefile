@@ -11,12 +11,6 @@ GITHUB_USERNAME=shogo82148
 
 all: build-windows-amd64 build-linux-amd64 build-darwin-amd64
 
-#### dependency management
-
-installdeps:
-	go get github.com/golang/dep/cmd/dep
-	dep ensure
-
 ##### build settings
 
 .PHONY: build build-windows-amd64 build-linux-amd64 build-darwin-amd64

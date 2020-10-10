@@ -29,10 +29,9 @@ func Run(cmd *cobra.Command, args []string) {
 		log.Fatal(err)
 	}
 
-	req := svc.CreateBucketRequest(&s3.CreateBucketInput{
+	_, err = svc.CreateBucket(context.Background(), &s3.CreateBucketInput{
 		Bucket: aws.String(bucketName),
 	})
-	_, err = req.Send(context.Background())
 	if err != nil {
 		log.Fatal(err)
 	}

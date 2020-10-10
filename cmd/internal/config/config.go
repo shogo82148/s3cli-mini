@@ -5,10 +5,9 @@ import (
 	"sync"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/aws/external"
+	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
-	"github.com/aws/aws-sdk-go-v2/service/s3/s3iface"
-	"github.com/aws/aws-sdk-go-v2/service/s3/s3manager"
+	"github.com/shogo82148/s3cli-mini/internal/s3iface"
 	"github.com/spf13/cobra"
 )
 
@@ -38,17 +37,17 @@ func LoadAWSConfig() (aws.Config, error) {
 		return awsConfig.Copy(), nil
 	}
 
-	configs := []external.Config{}
+	configs := []config.Config{}
 
 	if awsRegion != "" {
-		configs = append(configs, external.WithRegion(awsRegion))
+		configs = append(configs, config.WithRegion(awsRegion))
 	}
 	if awsProfile != "" {
-		configs = append(configs, external.WithSharedConfigProfile(awsProfile))
+		configs = append(configs, config.WithSharedConfigProfile(awsProfile))
 	}
 
 	// Load default config
-	cfg, err := external.LoadDefaultAWSConfig(configs...)
+	cfg, err := config.LoadDefaultConfig(configs...)
 	if err != nil {
 		return aws.Config{}, err
 	}
@@ -60,9 +59,10 @@ func LoadAWSConfig() (aws.Config, error) {
 			}, nil
 		})
 	}
-	if debug {
-		cfg.LogLevel = aws.LogDebug
-	}
+	// TODO: fix me
+	// if debug {
+	// 	cfg.LogLevel = aws.LogDebug
+	// }
 
 	awsConfig = cfg
 	awsConfigLoaded = true
@@ -70,18 +70,18 @@ func LoadAWSConfig() (aws.Config, error) {
 }
 
 // NewS3Client returns new S3 client.
-func NewS3Client() (s3iface.ClientAPI, error) {
+func NewS3Client() (s3iface.Interface, error) {
 	cfg, err := LoadAWSConfig()
 	if err != nil {
 		return nil, err
 	}
-	svc := s3.New(cfg)
+	svc := s3.NewFromConfig(cfg)
 	return svc, nil
 }
 
 // NewS3ServiceClient returns new S3 client that is used for getting s3 service level operation, such as ListBucket
 // https://docs.aws.amazon.com/AmazonS3/latest/API/RESTServiceGET.html
-func NewS3ServiceClient() (s3iface.ClientAPI, error) {
+func NewS3ServiceClient() (s3iface.Interface, error) {
 	cfg, err := LoadAWSConfig()
 	if err != nil {
 		return nil, err
@@ -90,26 +90,27 @@ func NewS3ServiceClient() (s3iface.ClientAPI, error) {
 		// fall back to US East (N. Virginia)
 		cfg.Region = "us-east-1"
 	}
-	svc := s3.New(cfg)
+	svc := s3.NewFromConfig(cfg)
 	return svc, nil
 }
 
 // NewS3BucketClient returns new S3 client that is used for the bucket.
-func NewS3BucketClient(ctx context.Context, bucket string) (s3iface.ClientAPI, error) {
+func NewS3BucketClient(ctx context.Context, bucket string) (s3iface.Interface, error) {
 	cfg, err := LoadAWSConfig()
 	if err != nil {
 		return nil, err
 	}
-	regionHint := cfg.Region
-	if regionHint == "" {
-		// fall back to US East (N. Virginia)
-		regionHint = "us-east-1"
-	}
-	region, err := s3manager.GetBucketRegion(ctx, cfg, bucket, regionHint)
-	if err != nil {
-		return nil, err
-	}
-	cfg.Region = region
-	svc := s3.New(cfg)
+	// TODO: fix me
+	// regionHint := cfg.Region
+	// if regionHint == "" {
+	// 	// fall back to US East (N. Virginia)
+	// 	regionHint = "us-east-1"
+	// }
+	// region, err := s3manager.GetBucketRegion(ctx, cfg, bucket, regionHint)
+	// if err != nil {
+	// 	return nil, err
+	// }
+	// cfg.Region = region
+	svc := s3.NewFromConfig(cfg)
 	return svc, nil
 }
