@@ -9,7 +9,9 @@ import (
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 	"github.com/shogo82148/s3cli-mini/cmd/internal/interfaces"
 )
 
@@ -32,8 +34,19 @@ func CreateTemporaryBucket(ctx context.Context, svc interfaces.S3Client) (string
 	}
 	bucketName := bucketPrefix() + hex.EncodeToString(b[:])
 
-	_, err := svc.CreateBucket(ctx, &s3.CreateBucketInput{
+	cfg, err := config.LoadDefaultConfig(ctx)
+	if err != nil {
+		return "", err
+	}
+	region := cfg.Region
+	if region == "" {
+		region = "us-east-1"
+	}
+	_, err = svc.CreateBucket(ctx, &s3.CreateBucketInput{
 		Bucket: aws.String(bucketName),
+		CreateBucketConfiguration: &types.CreateBucketConfiguration{
+			LocationConstraint: types.BucketLocationConstraint(region),
+		},
 	})
 	if err != nil {
 		return "", err
