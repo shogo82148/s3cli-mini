@@ -10,13 +10,13 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
-	"github.com/aws/aws-sdk-go-v2/service/s3/s3iface"
 	"github.com/shogo82148/s3cli-mini/cmd/internal/config"
+	"github.com/shogo82148/s3cli-mini/cmd/internal/interfaces"
 	"github.com/shogo82148/s3cli-mini/cmd/internal/testutils"
 	"github.com/spf13/cobra"
 )
 
-func prepareBucket(ctx context.Context, svc s3iface.ClientAPI) (string, error) {
+func prepareBucket(ctx context.Context, svc interfaces.S3Client) (string, error) {
 	bucketName, err := testutils.CreateTemporaryBucket(ctx, svc)
 	if err != nil {
 		return "", err
@@ -38,11 +38,11 @@ func prepareBucket(ctx context.Context, svc s3iface.ClientAPI) (string, error) {
 	// prepare objects for test
 	for _, key := range keys {
 		key := key
-		_, err = svc.PutObjectRequest(&s3.PutObjectInput{
+		_, err = svc.PutObject(ctx, &s3.PutObjectInput{
 			Bucket: aws.String(bucketName),
 			Key:    aws.String(key),
 			Body:   strings.NewReader(key),
-		}).Send(ctx)
+		})
 		if err != nil {
 			testutils.DeleteBucket(ctx, svc, bucketName)
 			return "", err
@@ -57,7 +57,7 @@ func TestLS_ListObjects(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	svc, err := config.NewS3Client()
+	svc, err := config.NewS3Client(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -88,7 +88,7 @@ func TestLS_recursive(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	svc, err := config.NewS3Client()
+	svc, err := config.NewS3Client(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}

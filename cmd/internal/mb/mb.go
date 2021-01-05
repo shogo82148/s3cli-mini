@@ -14,6 +14,9 @@ import (
 
 // Run runs mb command.
 func Run(cmd *cobra.Command, args []string) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	if len(args) != 1 {
 		log.Println("bucket name is missing.")
 		if err := cmd.Help(); err != nil {
@@ -24,15 +27,14 @@ func Run(cmd *cobra.Command, args []string) {
 
 	bucketName := strings.TrimPrefix(args[0], "s3://")
 
-	svc, err := config.NewS3Client()
+	svc, err := config.NewS3Client(ctx)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	req := svc.CreateBucketRequest(&s3.CreateBucketInput{
+	_, err = svc.CreateBucket(ctx, &s3.CreateBucketInput{
 		Bucket: aws.String(bucketName),
 	})
-	_, err = req.Send(context.Background())
 	if err != nil {
 		log.Fatal(err)
 	}

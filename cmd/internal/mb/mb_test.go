@@ -21,7 +21,7 @@ func TestMB(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	svc, err := config.NewS3Client()
+	svc, err := config.NewS3Client(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -40,9 +40,9 @@ func TestMB(t *testing.T) {
 	// wait for the bucket is visible
 	time.Sleep(time.Second)
 	for i := 0; i < 60; i++ {
-		_, err := svc.HeadBucketRequest(&s3.HeadBucketInput{
+		_, err := svc.HeadBucket(ctx, &s3.HeadBucketInput{
 			Bucket: aws.String(bucketName),
-		}).Send(ctx)
+		})
 		if err == nil {
 			return
 		}

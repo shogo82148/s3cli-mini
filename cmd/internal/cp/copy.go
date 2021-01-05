@@ -9,6 +9,7 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 )
 
 func (c *client) s3s3(src, dist string) error {
@@ -42,15 +43,19 @@ func (c *client) s3s3recursive(src, dist string) error {
 	}
 
 	// walk s3
-	req := c.s3.ListObjectsV2Request(&s3.ListObjectsV2Input{
+	p := s3.NewListObjectsV2Paginator(c.s3, &s3.ListObjectsV2Input{
 		Bucket: aws.String(srcBucket),
 		Prefix: aws.String(srcKey),
 	})
-	p := s3.NewListObjectsV2Paginator(req)
-	for p.Next(c.ctx) {
-		page := p.CurrentPage()
+	for p.HasMorePages() {
+		page, err := p.NextPage(c.ctx)
+		if err != nil {
+			c.cancel()
+			c.wg.Wait()
+			return err
+		}
 		for _, obj := range page.Contents {
-			key := aws.StringValue(obj.Key)
+			key := aws.ToString(obj.Key)
 			distKey := path.Join(distKey, strings.TrimPrefix(key, srcKey))
 			c.cmd.PrintErrf("copy s3://%s/%s to s3://%s/%s\n", srcBucket, key, distBucket, distKey)
 			if dryrun {
@@ -65,11 +70,6 @@ func (c *client) s3s3recursive(src, dist string) error {
 			}
 			cp.copy()
 		}
-	}
-	if err := p.Err(); err != nil {
-		c.cancel()
-		c.wg.Wait()
-		return err
 	}
 	c.wg.Wait()
 	return c.ctx.Err()
@@ -99,18 +99,18 @@ func (c *copier) copy() {
 
 	// multipart copy
 	// https://docs.aws.amazon.com/AmazonS3/latest/dev/CopyingObjctsMPUapi.html
-	resp, err := c.client.s3.CreateMultipartUploadRequest(&s3.CreateMultipartUploadInput{
+	resp, err := c.client.s3.CreateMultipartUpload(c.client.ctx, &s3.CreateMultipartUploadInput{
 		Bucket: aws.String(c.distBucket),
 		Key:    aws.String(c.distKey),
-	}).Send(c.client.ctx)
+	})
 	if err != nil {
 		c.setError(err)
 		return
 	}
-	uploadID := aws.StringValue(resp.UploadId)
+	uploadID := aws.ToString(resp.UploadId)
 	size := c.totalSize
 	var wg sync.WaitGroup
-	for i, pos := int64(1), int64(0); pos < size; i, pos = i+1, pos+copyChunkBytes {
+	for i, pos := int32(1), int64(0); pos < size; i, pos = i+1, pos+copyChunkBytes {
 		i, pos := i, pos
 		lastByte := pos + copyChunkBytes - 1
 		if lastByte >= size {
@@ -134,25 +134,25 @@ func (c *copier) copy() {
 		wg.Wait()
 		if c.client.ctx.Err() != nil {
 			// the request is aborted. clean up temporary resources.
-			_, err := c.client.s3.AbortMultipartUploadRequest(&s3.AbortMultipartUploadInput{
+			_, err := c.client.s3.AbortMultipartUpload(c.client.ctxAbort, &s3.AbortMultipartUploadInput{
 				Bucket:   aws.String(c.distBucket),
 				Key:      aws.String(c.distKey),
 				UploadId: aws.String(uploadID),
-			}).Send(c.client.ctxAbort)
+			})
 			if err != nil {
 				c.client.cmd.PrintErrln("failed to abort multipart upload ", err)
 			}
 			return
 		}
 		sort.Sort(c.parts)
-		_, err := c.client.s3.CompleteMultipartUploadRequest(&s3.CompleteMultipartUploadInput{
+		_, err := c.client.s3.CompleteMultipartUpload(c.client.ctxAbort, &s3.CompleteMultipartUploadInput{
 			Bucket:   aws.String(c.distBucket),
 			Key:      aws.String(c.distKey),
 			UploadId: aws.String(uploadID),
-			MultipartUpload: &s3.CompletedMultipartUpload{
+			MultipartUpload: &types.CompletedMultipartUpload{
 				Parts: c.parts,
 			},
-		}).Send(c.client.ctxAbort)
+		})
 		if err != nil {
 			c.setError(err)
 		}
@@ -160,14 +160,14 @@ func (c *copier) copy() {
 }
 
 func (c *copier) initSize() error {
-	resp, err := c.client.s3.HeadObjectRequest(&s3.HeadObjectInput{
+	resp, err := c.client.s3.HeadObject(c.client.ctx, &s3.HeadObjectInput{
 		Bucket: aws.String(c.srcBucket),
 		Key:    aws.String(c.srcKey),
-	}).Send(c.client.ctx)
+	})
 	if err != nil {
 		return err
 	}
-	c.totalSize = aws.Int64Value(resp.ContentLength)
+	c.totalSize = resp.ContentLength
 	return nil
 }
 
@@ -177,31 +177,31 @@ func (c *copier) singlePartCopy() {
 	}
 	go func() {
 		defer c.client.release()
-		_, err := c.client.s3.CopyObjectRequest(&s3.CopyObjectInput{
+		_, err := c.client.s3.CopyObject(c.client.ctx, &s3.CopyObjectInput{
 			Bucket:     aws.String(c.distBucket),
 			Key:        aws.String(c.distKey),
 			CopySource: aws.String(c.srcBucket + "/" + c.srcKey),
-		}).Send(c.client.ctx)
+		})
 		if err != nil {
 			c.setError(err)
 		}
 	}()
 }
 
-func (c *copier) copyChunk(uploadID string, num, pos, lastByte int64) {
-	resp, err := c.client.s3.UploadPartCopyRequest(&s3.UploadPartCopyInput{
+func (c *copier) copyChunk(uploadID string, num int32, pos, lastByte int64) {
+	resp, err := c.client.s3.UploadPartCopy(c.client.ctx, &s3.UploadPartCopyInput{
 		Bucket:          aws.String(c.distBucket),
 		Key:             aws.String(c.distKey),
 		CopySource:      aws.String(c.srcBucket + "/" + c.srcKey),
 		CopySourceRange: aws.String(fmt.Sprintf("bytes=%d-%d", pos, lastByte)),
 		UploadId:        aws.String(uploadID),
-		PartNumber:      aws.Int64(num),
-	}).Send(c.client.ctx)
+		PartNumber:      num,
+	})
 	if err != nil {
 		c.setError(err)
 		return
 	}
-	part := s3.CompletedPart{ETag: resp.CopyPartResult.ETag, PartNumber: aws.Int64(num)}
+	part := types.CompletedPart{ETag: resp.CopyPartResult.ETag, PartNumber: num}
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.parts = append(c.parts, part)

@@ -10,6 +10,7 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 	"github.com/shogo82148/s3cli-mini/cmd/internal/config"
 	"github.com/spf13/cobra"
 )
@@ -41,19 +42,19 @@ func Run(cmd *cobra.Command, args []string) {
 }
 
 func listBuckets(ctx context.Context, cmd *cobra.Command) {
-	svc, err := config.NewS3ServiceClient()
+	svc, err := config.NewS3ServiceClient(ctx)
 	if err != nil {
 		cmd.PrintErrln(err)
 		os.Exit(1)
 	}
-	resp, err := svc.ListBucketsRequest(&s3.ListBucketsInput{}).Send(ctx)
+	resp, err := svc.ListBuckets(ctx, &s3.ListBucketsInput{})
 	if err != nil {
 		cmd.PrintErrln(err)
 		os.Exit(1)
 	}
-	for _, b := range resp.ListBucketsOutput.Buckets {
-		creationDate := aws.TimeValue(b.CreationDate).In(time.Local)
-		cmd.Printf("%s %s\n", creationDate.Format("2006-01-02 15:04:05"), aws.StringValue(b.Name))
+	for _, b := range resp.Buckets {
+		creationDate := aws.ToTime(b.CreationDate).In(time.Local)
+		cmd.Printf("%s %s\n", creationDate.Format("2006-01-02 15:04:05"), aws.ToString(b.Name))
 	}
 }
 
@@ -75,18 +76,21 @@ func listObjects(ctx context.Context, cmd *cobra.Command, path string) {
 	}
 
 	var objects, totalBytes int64
-	req := svc.ListObjectsV2Request(input)
-	p := s3.NewListObjectsV2Paginator(req)
-	for p.Next(ctx) {
-		page := p.CurrentPage()
+	paginator := s3.NewListObjectsV2Paginator(svc, input)
+	for paginator.HasMorePages() {
+		page, err := paginator.NextPage(ctx)
+		if err != nil {
+			cmd.PrintErrln(err)
+			os.Exit(1)
+		}
 		objects += int64(len(page.Contents))
 		// merge Contents and CommonPrefixes
 		contents := page.Contents
 		prefixes := page.CommonPrefixes
 		for len(contents) > 0 && len(prefixes) > 0 {
-			if aws.StringValue(contents[0].Key) < aws.StringValue(prefixes[0].Prefix) {
+			if aws.ToString(contents[0].Key) < aws.ToString(prefixes[0].Prefix) {
 				printObject(cmd, contents[0])
-				totalBytes += aws.Int64Value(contents[0].Size)
+				totalBytes += contents[0].Size
 				contents = contents[1:]
 			} else {
 				printPrefix(cmd, prefixes[0])
@@ -95,15 +99,11 @@ func listObjects(ctx context.Context, cmd *cobra.Command, path string) {
 		}
 		for _, obj := range contents {
 			printObject(cmd, obj)
-			totalBytes += aws.Int64Value(obj.Size)
+			totalBytes += obj.Size
 		}
 		for _, prefix := range prefixes {
 			printPrefix(cmd, prefix)
 		}
-	}
-	if err := p.Err(); err != nil {
-		cmd.PrintErrln(err)
-		os.Exit(1)
 	}
 
 	if summarize {
@@ -127,18 +127,18 @@ func parsePath(path string) (bucket, key string) {
 	return
 }
 
-func printObject(cmd *cobra.Command, obj s3.Object) {
-	date := aws.TimeValue(obj.LastModified).In(time.Local).Format("2006-01-02 15:04:05")
-	size := aws.Int64Value(obj.Size)
+func printObject(cmd *cobra.Command, obj types.Object) {
+	date := aws.ToTime(obj.LastModified).In(time.Local).Format("2006-01-02 15:04:05")
+	size := obj.Size
 	if humanReadable {
-		cmd.Printf("%s %10s %s\n", date, makeHumanReadable(size), aws.StringValue(obj.Key))
+		cmd.Printf("%s %10s %s\n", date, makeHumanReadable(size), aws.ToString(obj.Key))
 	} else {
-		cmd.Printf("%s %10d %s\n", date, size, aws.StringValue(obj.Key))
+		cmd.Printf("%s %10d %s\n", date, size, aws.ToString(obj.Key))
 	}
 }
 
-func printPrefix(cmd *cobra.Command, prefix s3.CommonPrefix) {
-	cmd.Printf("                           PRE %s\n", aws.StringValue(prefix.Prefix))
+func printPrefix(cmd *cobra.Command, prefix types.CommonPrefix) {
+	cmd.Printf("                           PRE %s\n", aws.ToString(prefix.Prefix))
 }
 
 // port of https://github.com/aws/aws-cli/blob/072688cc07578144060aead8b75556fd986e0f2f/awscli/customizations/s3/utils.py#L47-L77
