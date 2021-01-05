@@ -60,10 +60,9 @@ func LoadAWSConfig(ctx context.Context) (aws.Config, error) {
 			}, nil
 		})
 	}
-	// TODO: @shogo82148 fix me
-	// if debug {
-	// 	cfg.LogLevel = true
-	// }
+	if debug {
+		cfg.ClientLogMode |= aws.LogSigning | aws.LogRetries | aws.LogRequest | aws.LogRequestWithBody | aws.LogResponse | aws.LogResponseWithBody
+	}
 
 	awsConfig = cfg
 	awsConfigLoaded = true
