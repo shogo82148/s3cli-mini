@@ -80,8 +80,8 @@ func TestCP_Upload(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, g := range retACL.Grants {
-		if g.Grantee.Type != types.TypeCanonicaluser {
-			t.Errorf("unexpected grantee type, want %s, got %s", types.TypeCanonicaluser, g.Grantee.Type)
+		if g.Grantee.Type != types.TypeCanonicalUser {
+			t.Errorf("unexpected grantee type, want %s, got %s", types.TypeCanonicalUser, g.Grantee.Type)
 		}
 	}
 }
@@ -147,8 +147,8 @@ func TestCP_Upload_Multipart(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, g := range retACL.Grants {
-		if g.Grantee.Type != types.TypeCanonicaluser {
-			t.Errorf("unexpected grantee type, want %s, got %s", types.TypeCanonicaluser, g.Grantee.Type)
+		if g.Grantee.Type != types.TypeCanonicalUser {
+			t.Errorf("unexpected grantee type, want %s, got %s", types.TypeCanonicalUser, g.Grantee.Type)
 		}
 	}
 }

@@ -3,10 +3,10 @@ module github.com/shogo82148/s3cli-mini
 go 1.15
 
 require (
-	github.com/aws/aws-sdk-go-v2 v0.31.0
-	github.com/aws/aws-sdk-go-v2/config v0.4.0
-	github.com/aws/aws-sdk-go-v2/feature/s3/manager v0.2.0
-	github.com/aws/aws-sdk-go-v2/service/s3 v0.31.0
+	github.com/aws/aws-sdk-go-v2 v0.31.1-0.20210108235028-05659bd25970
+	github.com/aws/aws-sdk-go-v2/config v0.4.1-0.20210108235028-05659bd25970
+	github.com/aws/aws-sdk-go-v2/feature/s3/manager v0.2.1-0.20210108235028-05659bd25970
+	github.com/aws/aws-sdk-go-v2/service/s3 v0.31.1-0.20210108235028-05659bd25970
 	github.com/fsnotify/fsnotify v1.4.9 // indirect
 	github.com/mitchellh/go-homedir v1.1.0
 	github.com/mitchellh/mapstructure v1.3.1 // indirect
