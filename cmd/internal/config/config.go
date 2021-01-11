@@ -5,10 +5,10 @@ import (
 	"sync"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/aws/external"
+	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/feature/s3/manager"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
-	"github.com/aws/aws-sdk-go-v2/service/s3/s3iface"
-	"github.com/aws/aws-sdk-go-v2/service/s3/s3manager"
+	"github.com/shogo82148/s3cli-mini/cmd/internal/interfaces"
 	"github.com/spf13/cobra"
 )
 
@@ -30,7 +30,7 @@ func InitFlag(cmd *cobra.Command) {
 }
 
 // LoadAWSConfig returns aws.Config.
-func LoadAWSConfig() (aws.Config, error) {
+func LoadAWSConfig(ctx context.Context) (aws.Config, error) {
 	mu.Lock()
 	defer mu.Unlock()
 
@@ -38,17 +38,17 @@ func LoadAWSConfig() (aws.Config, error) {
 		return awsConfig.Copy(), nil
 	}
 
-	configs := []external.Config{}
+	opts := []func(*config.LoadOptions) error{}
 
 	if awsRegion != "" {
-		configs = append(configs, external.WithRegion(awsRegion))
+		opts = append(opts, config.WithRegion(awsRegion))
 	}
 	if awsProfile != "" {
-		configs = append(configs, external.WithSharedConfigProfile(awsProfile))
+		opts = append(opts, config.WithSharedConfigProfile(awsProfile))
 	}
 
 	// Load default config
-	cfg, err := external.LoadDefaultAWSConfig(configs...)
+	cfg, err := config.LoadDefaultConfig(ctx, opts...)
 	if err != nil {
 		return aws.Config{}, err
 	}
@@ -61,7 +61,7 @@ func LoadAWSConfig() (aws.Config, error) {
 		})
 	}
 	if debug {
-		cfg.LogLevel = aws.LogDebug
+		cfg.ClientLogMode |= aws.LogSigning | aws.LogRetries | aws.LogRequest | aws.LogRequestWithBody | aws.LogResponse | aws.LogResponseWithBody
 	}
 
 	awsConfig = cfg
@@ -70,19 +70,19 @@ func LoadAWSConfig() (aws.Config, error) {
 }
 
 // NewS3Client returns new S3 client.
-func NewS3Client() (s3iface.ClientAPI, error) {
-	cfg, err := LoadAWSConfig()
+func NewS3Client(ctx context.Context) (interfaces.S3Client, error) {
+	cfg, err := LoadAWSConfig(ctx)
 	if err != nil {
 		return nil, err
 	}
-	svc := s3.New(cfg)
+	svc := s3.NewFromConfig(cfg)
 	return svc, nil
 }
 
 // NewS3ServiceClient returns new S3 client that is used for getting s3 service level operation, such as ListBucket
 // https://docs.aws.amazon.com/AmazonS3/latest/API/RESTServiceGET.html
-func NewS3ServiceClient() (s3iface.ClientAPI, error) {
-	cfg, err := LoadAWSConfig()
+func NewS3ServiceClient(ctx context.Context) (interfaces.S3Client, error) {
+	cfg, err := LoadAWSConfig(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -90,26 +90,22 @@ func NewS3ServiceClient() (s3iface.ClientAPI, error) {
 		// fall back to US East (N. Virginia)
 		cfg.Region = "us-east-1"
 	}
-	svc := s3.New(cfg)
+	svc := s3.NewFromConfig(cfg)
 	return svc, nil
 }
 
 // NewS3BucketClient returns new S3 client that is used for the bucket.
-func NewS3BucketClient(ctx context.Context, bucket string) (s3iface.ClientAPI, error) {
-	cfg, err := LoadAWSConfig()
+func NewS3BucketClient(ctx context.Context, bucket string) (interfaces.S3Client, error) {
+	cfg, err := LoadAWSConfig(ctx)
 	if err != nil {
 		return nil, err
 	}
-	regionHint := cfg.Region
-	if regionHint == "" {
-		// fall back to US East (N. Virginia)
-		regionHint = "us-east-1"
-	}
-	region, err := s3manager.GetBucketRegion(ctx, cfg, bucket, regionHint)
+	svc := s3.NewFromConfig(cfg)
+	region, err := manager.GetBucketRegion(ctx, svc, bucket)
 	if err != nil {
 		return nil, err
 	}
 	cfg.Region = region
-	svc := s3.New(cfg)
+	svc = s3.NewFromConfig(cfg)
 	return svc, nil
 }
