@@ -42,12 +42,15 @@ func CreateTemporaryBucket(ctx context.Context, svc interfaces.S3Client) (string
 	if region == "" {
 		region = "us-east-1"
 	}
-	_, err = svc.CreateBucket(ctx, &s3.CreateBucketInput{
+	input := &s3.CreateBucketInput{
 		Bucket: aws.String(bucketName),
-		CreateBucketConfiguration: &types.CreateBucketConfiguration{
+	}
+	if region != "us-east-1" {
+		input.CreateBucketConfiguration = &types.CreateBucketConfiguration{
 			LocationConstraint: types.BucketLocationConstraint(region),
-		},
-	})
+		}
+	}
+	_, err = svc.CreateBucket(ctx, input)
 	if err != nil {
 		return "", err
 	}
