@@ -43,12 +43,15 @@ func Run(cmd *cobra.Command, args []string) {
 		log.Fatal(err)
 	}
 
-	_, err = svc.CreateBucket(ctx, &s3.CreateBucketInput{
+	input := &s3.CreateBucketInput{
 		Bucket: aws.String(bucketName),
-		CreateBucketConfiguration: &types.CreateBucketConfiguration{
+	}
+	if region != "us-east-1" {
+		input.CreateBucketConfiguration = &types.CreateBucketConfiguration{
 			LocationConstraint: types.BucketLocationConstraint(region),
-		},
-	})
+		}
+	}
+	_, err = svc.CreateBucket(ctx, input)
 	if err != nil {
 		log.Fatal(err)
 	}
