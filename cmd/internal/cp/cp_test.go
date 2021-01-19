@@ -81,9 +81,7 @@ func TestCP_Upload(t *testing.T) {
 	}
 	for _, g := range retACL.Grants {
 		if g.Grantee.Type != types.TypeCanonicalUser {
-			// TODO: fix me
-			// https://github.com/aws/aws-sdk-go-v2/issues/1013 breaks this test.
-			t.Logf("unexpected grantee type, want %s, got %s", types.TypeCanonicalUser, g.Grantee.Type)
+			t.Errorf("unexpected grantee type, want %s, got %s", types.TypeCanonicalUser, g.Grantee.Type)
 		}
 	}
 }
@@ -150,9 +148,7 @@ func TestCP_Upload_Multipart(t *testing.T) {
 	}
 	for _, g := range retACL.Grants {
 		if g.Grantee.Type != types.TypeCanonicalUser {
-			// TODO: fix me
-			// https://github.com/aws/aws-sdk-go-v2/issues/1013 breaks this test.
-			t.Logf("unexpected grantee type, want %s, got %s", types.TypeCanonicalUser, g.Grantee.Type)
+			t.Errorf("unexpected grantee type, want %s, got %s", types.TypeCanonicalUser, g.Grantee.Type)
 		}
 	}
 }
@@ -274,9 +270,7 @@ func TestCP_UploadPublicACL(t *testing.T) {
 				g.Permission == types.PermissionRead)
 	}
 	if !publicRead {
-		// TODO: fix me
-		// https://github.com/aws/aws-sdk-go-v2/issues/1013
-		// t.Error("unexpected acl: want public-read, but not")
+		t.Error("unexpected acl: want public-read, but not")
 	}
 }
 
