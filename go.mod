@@ -3,14 +3,10 @@ module github.com/shogo82148/s3cli-mini
 go 1.15
 
 require (
-	github.com/aws/aws-sdk-go-v2 v0.31.1-0.20210116010317-e18d7141fc06
-	github.com/aws/aws-sdk-go-v2/config v0.4.1-0.20210116010317-e18d7141fc06
-	github.com/aws/aws-sdk-go-v2/credentials v0.2.1-0.20210116010317-e18d7141fc06 // indirect
-	github.com/aws/aws-sdk-go-v2/feature/ec2/imds v0.1.1-0.20210116010317-e18d7141fc06 // indirect
-	github.com/aws/aws-sdk-go-v2/feature/s3/manager v0.2.1-0.20210116010317-e18d7141fc06
-	github.com/aws/aws-sdk-go-v2/service/internal/accept-encoding v0.4.1-0.20210116010317-e18d7141fc06 // indirect
-	github.com/aws/aws-sdk-go-v2/service/s3 v0.31.1-0.20210116010317-e18d7141fc06
-	github.com/aws/aws-sdk-go-v2/service/sts v0.31.1-0.20210116010317-e18d7141fc06 // indirect
+	github.com/aws/aws-sdk-go-v2 v1.0.0
+	github.com/aws/aws-sdk-go-v2/config v1.0.0
+	github.com/aws/aws-sdk-go-v2/feature/s3/manager v1.0.0
+	github.com/aws/aws-sdk-go-v2/service/s3 v1.0.0
 	github.com/fsnotify/fsnotify v1.4.9 // indirect
 	github.com/mitchellh/go-homedir v1.1.0
 	github.com/mitchellh/mapstructure v1.3.1 // indirect
