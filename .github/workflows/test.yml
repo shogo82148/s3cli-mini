@@ -33,16 +33,20 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-go-
       - run: go mod download
+
+      - name: Configure AWS Credentials
+        uses: shogo82148/actions-aws-assume-role@v1
+        with:
+          aws-region: us-east-1
+          role-to-assume: arn:aws:iam::445285296882:role/main-stack-S3CLI-R7CPXMJBV8JQ-TestRole-1EF9TX5KNO0QH
+          role-session-tagging: true
+
       - name: Test
         run: |
           make test
         env:
           GO111MODULE: "on"
           S3CLI_TEST_BUCKET_PREFIX: ${{ secrets.S3CLI_TEST_BUCKET_PREFIX }}
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          AWS_REGION: us-east-1
-          AWS_DEFAULT_REGION: us-east-1
 
       - name: Send coverage
         uses: shogo82148/actions-goveralls@v1
