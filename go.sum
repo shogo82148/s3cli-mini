@@ -20,8 +20,9 @@ github.com/alecthomas/units v0.0.0-20151022065526-2efee857e7cf/go.mod h1:ybxpYRF
 github.com/armon/circbuf v0.0.0-20150827004946-bbbad097214e/go.mod h1:3U/XgcO3hCbHZ8TKRvWD2dDTCfh9M9ya+I9JpbB7O8o=
 github.com/armon/go-metrics v0.0.0-20180917152333-f0300d1749da/go.mod h1:Q73ZrmVTwzkszR9V5SSuryQ31EELlFMUz1kKyl939pY=
 github.com/armon/go-radix v0.0.0-20180808171621-7fddfc383310/go.mod h1:ufUuZ+zHj4x4TnLV4JWEpy2hxWSpsRywHrMgIH9cCH8=
-github.com/aws/aws-sdk-go-v2 v1.5.0 h1:o0TprBiEkqtMGD2Ira1VCq3zwWej256zHLSRcd+cxUA=
 github.com/aws/aws-sdk-go-v2 v1.5.0/go.mod h1:tI4KhsR5VkzlUa2DZAdwx7wCAYGwkZZ1H31PYrBFx1w=
+github.com/aws/aws-sdk-go-v2 v1.6.0 h1:r20hdhm8wZmKkClREfacXrKfX0Y7/s0aOoeraFbf/sY=
+github.com/aws/aws-sdk-go-v2 v1.6.0/go.mod h1:tI4KhsR5VkzlUa2DZAdwx7wCAYGwkZZ1H31PYrBFx1w=
 github.com/aws/aws-sdk-go-v2/config v1.2.0 h1:3JVWs+ilru3/5Zq6KbuQj8aqp7DW+Uw/wv6gCYZ2UnI=
 github.com/aws/aws-sdk-go-v2/config v1.2.0/go.mod h1:JgPbg7YzzczkGu1Zi0hHVKYXVzx4OTKnNSD+h+qlpLw=
 github.com/aws/aws-sdk-go-v2/credentials v1.2.0 h1:NxD//04/Y4nid+Slj8JjouisY/DAYjjXW4lqWNkBaO8=
@@ -30,6 +31,8 @@ github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.1.0 h1:EVNLR3OULDnvp92ISADQwZwV
 github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.1.0/go.mod h1:GOKx1449nzMoUdTKrP41RsPn1hogOaxb+5MaoOiZgqc=
 github.com/aws/aws-sdk-go-v2/feature/s3/manager v1.2.0 h1:GrhnT5bPRTcOEwEgeibaEmmRfI1o4kYMs79r10Cj4IE=
 github.com/aws/aws-sdk-go-v2/feature/s3/manager v1.2.0/go.mod h1:FRsp2fR7xScVL5t45Hg1HTOF1Io/ZB5jeU5zBpxFAI0=
+github.com/aws/aws-sdk-go-v2/internal/ini v1.0.0 h1:k7I9E6tyVWBo7H9ffpnxDWudtjau6Qt9rnOYgV+ciEQ=
+github.com/aws/aws-sdk-go-v2/internal/ini v1.0.0/go.mod h1:g3XMXuxvqSMUjnsXXp/960152w0wFS4CXVYgQaSVOHE=
 github.com/aws/aws-sdk-go-v2/service/internal/accept-encoding v1.1.0 h1:XwqxIO9LtNXznBbEMNGumtLN60k4nVqDpVwVWx3XU/o=
 github.com/aws/aws-sdk-go-v2/service/internal/accept-encoding v1.1.0/go.mod h1:zdjOOy0ojUn3iNELo6ycIHSMCp4xUbycSHfb8PnbbyM=
 github.com/aws/aws-sdk-go-v2/service/internal/presigned-url v1.1.0 h1:i+cyzgQbk02N3pbwBTwjOChoDuIxsGdE6ucD2ZLVnJQ=
