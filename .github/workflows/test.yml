@@ -36,6 +36,7 @@ jobs:
 
       - name: Configure AWS Credentials
         uses: fuller-inc/actions-aws-assume-role@v1
+        continue-on-error: true
         with:
           aws-region: us-east-1
           role-to-assume: arn:aws:iam::445285296882:role/main-stack-S3CLI-R7CPXMJBV8JQ-TestRole-1EF9TX5KNO0QH
