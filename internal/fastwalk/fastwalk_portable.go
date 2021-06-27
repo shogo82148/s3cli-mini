@@ -8,8 +8,9 @@
 package fastwalk
 
 import (
-	"io/ioutil"
+	"io/fs"
 	"os"
+	"sort"
 )
 
 // readDir calls fn for each directory entry in dirName.
@@ -17,7 +18,7 @@ import (
 // If fn returns a non-nil error, readDir returns with that error
 // immediately.
 func readDir(dirName string, fn func(dirName, entName string, typ os.FileMode) error) error {
-	fis, err := ioutil.ReadDir(dirName)
+	fis, err := readdir(dirName)
 	if err != nil {
 		return err
 	}
@@ -35,4 +36,18 @@ func readDir(dirName string, fn func(dirName, entName string, typ os.FileMode) e
 		}
 	}
 	return nil
+}
+
+func readdir(dirname string) ([]fs.FileInfo, error) {
+	f, err := os.Open(dirname)
+	if err != nil {
+		return nil, err
+	}
+	list, err := f.Readdir(-1)
+	f.Close()
+	if err != nil {
+		return nil, err
+	}
+	sort.Slice(list, func(i, j int) bool { return list[i].Name() < list[j].Name() })
+	return list, nil
 }

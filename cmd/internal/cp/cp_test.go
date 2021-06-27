@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"io"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"testing"
@@ -36,13 +35,13 @@ func TestCP_Upload(t *testing.T) {
 
 	// prepare a test file
 	content := []byte("temporary file's content")
-	dir, err := ioutil.TempDir("", "s3cli-mini")
+	dir, err := os.MkdirTemp("", "s3cli-mini")
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer os.RemoveAll(dir)
 	filename := filepath.Join(dir, "tmpfile")
-	if err := ioutil.WriteFile(filename, content, 0666); err != nil {
+	if err := os.WriteFile(filename, content, 0666); err != nil {
 		t.Fatal(err)
 	}
 
@@ -59,7 +58,7 @@ func TestCP_Upload(t *testing.T) {
 	}
 
 	// check body
-	body, err := ioutil.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -103,13 +102,13 @@ func TestCP_Upload_Multipart(t *testing.T) {
 
 	// prepare a test file
 	content := bytes.Repeat([]byte("temporary file's content"), 1024*1024)
-	dir, err := ioutil.TempDir("", "s3cli-mini")
+	dir, err := os.MkdirTemp("", "s3cli-mini")
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer os.RemoveAll(dir)
 	filename := filepath.Join(dir, "tmpfile")
-	if err := ioutil.WriteFile(filename, content, 0666); err != nil {
+	if err := os.WriteFile(filename, content, 0666); err != nil {
 		t.Fatal(err)
 	}
 
@@ -126,7 +125,7 @@ func TestCP_Upload_Multipart(t *testing.T) {
 	}
 
 	// check body
-	body, err := ioutil.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -170,13 +169,13 @@ func TestCP_Upload_KeyOmitted(t *testing.T) {
 
 	// prepare a test file
 	content := []byte("temporary file's content")
-	dir, err := ioutil.TempDir("", "s3cli-mini")
+	dir, err := os.MkdirTemp("", "s3cli-mini")
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer os.RemoveAll(dir)
 	filename := filepath.Join(dir, "tmpfile")
-	if err := ioutil.WriteFile(filename, content, 0666); err != nil {
+	if err := os.WriteFile(filename, content, 0666); err != nil {
 		t.Fatal(err)
 	}
 
@@ -191,7 +190,7 @@ func TestCP_Upload_KeyOmitted(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	body, err := ioutil.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -218,13 +217,13 @@ func TestCP_UploadPublicACL(t *testing.T) {
 
 	// prepare a test file
 	content := []byte("temporary file's content")
-	dir, err := ioutil.TempDir("", "s3cli-mini")
+	dir, err := os.MkdirTemp("", "s3cli-mini")
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer os.RemoveAll(dir)
 	filename := filepath.Join(dir, "tmpfile")
-	if err := ioutil.WriteFile(filename, content, 0666); err != nil {
+	if err := os.WriteFile(filename, content, 0666); err != nil {
 		t.Fatal(err)
 	}
 
@@ -245,7 +244,7 @@ func TestCP_UploadPublicACL(t *testing.T) {
 	}
 
 	// check body
-	body, err := ioutil.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -291,7 +290,7 @@ func TestCP_Upload_recursive(t *testing.T) {
 
 	// prepare test files
 	content := []byte("temporary file's content")
-	dir, err := ioutil.TempDir("", "s3cli-mini")
+	dir, err := os.MkdirTemp("", "s3cli-mini")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -314,7 +313,7 @@ func TestCP_Upload_recursive(t *testing.T) {
 		if err := os.MkdirAll(dir, 0755); err != nil {
 			t.Fatal(err)
 		}
-		if err := ioutil.WriteFile(filename, content, 0666); err != nil {
+		if err := os.WriteFile(filename, content, 0666); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -336,7 +335,7 @@ func TestCP_Upload_recursive(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		body, err := ioutil.ReadAll(resp.Body)
+		body, err := io.ReadAll(resp.Body)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -374,7 +373,7 @@ func TestCP_Download(t *testing.T) {
 	}
 
 	// test
-	dir, err := ioutil.TempDir("", "s3cli-mini")
+	dir, err := os.MkdirTemp("", "s3cli-mini")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -383,7 +382,7 @@ func TestCP_Download(t *testing.T) {
 	cmd := &cobra.Command{}
 	Run(cmd, []string{"s3://" + bucketName + "/tmpfile", filename})
 
-	got, err := ioutil.ReadFile(filename)
+	got, err := os.ReadFile(filename)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -409,7 +408,7 @@ func TestCP_DownloadRecursive(t *testing.T) {
 
 	// prepare a test object
 	content := []byte("temporary file's content")
-	dir, err := ioutil.TempDir("", "s3cli-mini")
+	dir, err := os.MkdirTemp("", "s3cli-mini")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -447,7 +446,7 @@ func TestCP_DownloadRecursive(t *testing.T) {
 
 	for _, key := range keys {
 		filename := filepath.Join(dir, filepath.FromSlash(key))
-		data, err := ioutil.ReadFile(filename)
+		data, err := os.ReadFile(filename)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -494,7 +493,7 @@ func TestCP_Copy(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	body, err := ioutil.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -546,7 +545,7 @@ func TestCP_CopyMultipart(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	body, err := ioutil.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -573,7 +572,7 @@ func TestCP_CopyRecursive(t *testing.T) {
 
 	// prepare test files
 	content := []byte("temporary file's content")
-	dir, err := ioutil.TempDir("", "s3cli-mini")
+	dir, err := os.MkdirTemp("", "s3cli-mini")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -629,7 +628,7 @@ func TestCP_CopyRecursive(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		body, err := ioutil.ReadAll(resp.Body)
+		body, err := io.ReadAll(resp.Body)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -657,7 +656,7 @@ func TestCP_CopyRecursiveMultipart(t *testing.T) {
 
 	// prepare test objects
 	content := bytes.Repeat([]byte("temporary"), 1024*1024)
-	dir, err := ioutil.TempDir("", "s3cli-mini")
+	dir, err := os.MkdirTemp("", "s3cli-mini")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -715,7 +714,7 @@ func TestCP_CopyRecursiveMultipart(t *testing.T) {
 					return nil
 				}
 				defer resp.Body.Close()
-				body, err := ioutil.ReadAll(resp.Body)
+				body, err := io.ReadAll(resp.Body)
 				if err != nil {
 					t.Errorf("error while reading %s: %v", key, err)
 					return nil
@@ -766,7 +765,7 @@ func TestCP_DownloadStdout(t *testing.T) {
 		err error
 	}, 1)
 	go func() {
-		data, err := ioutil.ReadAll(r)
+		data, err := io.ReadAll(r)
 		ch <- struct {
 			str string
 			err error
@@ -828,7 +827,7 @@ func TestCP_UploadStdin(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	body, err := ioutil.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		t.Fatal(err)
 	}
