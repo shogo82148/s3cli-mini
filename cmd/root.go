@@ -25,9 +25,9 @@ import (
 	"os"
 
 	homedir "github.com/mitchellh/go-homedir"
+	"github.com/shogo82148/s3cli-mini/cmd/internal/config"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
-	"github.com/shogo82148/s3cli-mini/cmd/internal/config"
 )
 
 var cfgFile string
