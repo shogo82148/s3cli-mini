@@ -12,7 +12,7 @@ builds:
       - darwin
     goarch:
       - amd64
-    binary: cloudwatch-logs-agent-lite
+    binary: s3cli-mini
     ldflags:
       - -s -w
       - -X github.com/shogo82148/s3cli-mini/cmd.version={{.Version}}
@@ -25,7 +25,7 @@ builds:
       - darwin
     goarch:
       - arm64
-    binary: cloudwatch-logs-agent-lite
+    binary: s3cli-mini
     ldflags:
       - -s -w
       - -X github.com/shogo82148/s3cli-mini/cmd.version={{.Version}}
@@ -48,9 +48,9 @@ nfpms:
   - id: package-amd64
     builds:
       - cli-amd64
-    homepage: https://github.com/shogo82148/cloudwatch-logs-agent-lite/
+    homepage: https://github.com/shogo82148/s3cli-mini/
     maintainer: Ichinose Shogo <shogo82148@gmail.com>
-    description: Lightweight log forwarder with CloudWatch
+    description: Golang port for AWS Command Line Interface S3 subcommand.
     license: MIT
     formats:
       - apk
