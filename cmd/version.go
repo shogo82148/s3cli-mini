@@ -23,12 +23,13 @@ package cmd
 import (
 	"fmt"
 	"runtime"
+	"runtime/debug"
 
 	"github.com/spf13/cobra"
 )
 
-// Version is the version of s3cli-mini
-const Version = "0.0.7"
+// the version is set by goreleaser
+var version = "" // .Version
 
 // versionCmd represents the cp command
 var versionCmd = &cobra.Command{
@@ -38,11 +39,22 @@ var versionCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		fmt.Printf(
 			"s3cli-mini version %s built with %s %s %s\n",
-			Version, runtime.Version(), runtime.GOOS, runtime.GOARCH,
+			getVersion(), runtime.Version(), runtime.GOOS, runtime.GOARCH,
 		)
 	},
 }
 
 func init() {
 	rootCmd.AddCommand(versionCmd)
+}
+
+func getVersion() string {
+	if version != "" {
+		return version
+	}
+	info, ok := debug.ReadBuildInfo()
+	if !ok {
+		return "unknown"
+	}
+	return info.Main.Version
 }
