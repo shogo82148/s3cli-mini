@@ -26,7 +26,7 @@ func InitFlag(cmd *cobra.Command) {
 	flags.BoolVar(&debug, "debug", false, "Turn on debug logging.")
 	flags.StringVar(&awsRegion, "region", "", "The region to use. Overrides config/env settings.")
 	flags.StringVar(&awsProfile, "profile", "", "Use a specific profile from your credential file.")
-	flags.StringVar(&endpointURL, "endpoint-url", "", "UOverride command's default URL with the given URL.")
+	flags.StringVar(&endpointURL, "endpoint-url", "", "Overrides command's default URL with the given URL.")
 }
 
 // LoadAWSConfig returns aws.Config.
