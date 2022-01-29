@@ -46,6 +46,6 @@ The `mb` command creates an S3 bucket.
 s3cli-mini mb your-bucket
 ```
 
-## Licence
+## License
 
 The MIT License. See LICENSE file.
