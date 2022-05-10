@@ -4,7 +4,7 @@ go 1.17
 
 require (
 	github.com/aws/aws-sdk-go-v2 v1.16.3
-	github.com/aws/aws-sdk-go-v2/config v1.15.4
+	github.com/aws/aws-sdk-go-v2/config v1.15.5
 	github.com/aws/aws-sdk-go-v2/feature/s3/manager v1.11.9
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.26.9
 	github.com/mitchellh/go-homedir v1.1.0
