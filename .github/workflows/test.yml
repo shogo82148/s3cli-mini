@@ -18,13 +18,13 @@ jobs:
 
     runs-on: ${{ matrix.os }}
     steps:
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@v3
+
       - name: Set up Go
         uses: actions/setup-go@v4
         with:
-          go-version: "1.18"
-
-      - name: Check out code into the Go module directory
-        uses: actions/checkout@v3
+          go-version-file: go.mod
 
       - uses: actions/cache@v3
         with:
@@ -75,7 +75,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v4
         with:
-          go-version: "1.18"
+          go-version-file: go.mod
       - name: Check GoReleaser configure
         uses: goreleaser/goreleaser-action@v4
         with:
