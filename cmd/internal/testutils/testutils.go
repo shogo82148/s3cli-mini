@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
+	"log"
 	"os"
 	"sync"
 	"testing"
@@ -86,6 +87,7 @@ func (pool *BucketPool) Get(ctx context.Context) (*Bucket, error) {
 	if err != nil {
 		return nil, err
 	}
+	log.Printf("🗑 bucket %q is created", bucket.name)
 
 	// wait for the bucket is visible
 	time.Sleep(5 * time.Second)
@@ -104,16 +106,16 @@ func (pool *BucketPool) Put(bucket *Bucket) {
 	pool.pool[bucket] = struct{}{}
 }
 
-func (pool *BucketPool) Cleanup(ctx context.Context) error {
+func (pool *BucketPool) Cleanup(ctx context.Context) {
 	pool.mu.Lock()
 	defer pool.mu.Unlock()
 
+	log.Println("🗑 cleanup buckets...")
 	for bucket := range pool.all {
-		if err := pool.makeEmpty(ctx, bucket); err == nil {
-			pool.deleteBucket(ctx, bucket)
+		if err := DeleteBucket(ctx, pool.svc, bucket.name); err != nil {
+			log.Printf("🗑 failed to delete bucket %s: %s", bucket.name, err)
 		}
 	}
-	return nil
 }
 
 func (pool *BucketPool) get() *Bucket {
@@ -183,29 +185,7 @@ func (pool *BucketPool) waitForCreating(ctx context.Context, bucket *Bucket) err
 
 // makeEmpty deletes all objects in the bucket.
 func (pool *BucketPool) makeEmpty(ctx context.Context, bucket *Bucket) error {
-	p := s3.NewListObjectsV2Paginator(pool.svc, &s3.ListObjectsV2Input{
-		Bucket: aws.String(bucket.name),
-	})
-	for p.HasMorePages() {
-		page, err := p.NextPage(ctx)
-		if err != nil {
-			return nil
-		}
-		for _, obj := range page.Contents {
-			pool.svc.DeleteObject(ctx, &s3.DeleteObjectInput{
-				Bucket: aws.String(bucket.name),
-				Key:    obj.Key,
-			})
-		}
-	}
-	return nil
-}
-
-func (pool *BucketPool) deleteBucket(ctx context.Context, bucket *Bucket) error {
-	_, err := pool.svc.DeleteBucket(ctx, &s3.DeleteBucketInput{
-		Bucket: aws.String(bucket.name),
-	})
-	return err
+	return makeEmpty(ctx, pool.svc, bucket)
 }
 
 type DeleteBucketAPI interface {
@@ -214,10 +194,9 @@ type DeleteBucketAPI interface {
 	interfaces.ObjectDeleter
 }
 
-// DeleteBucket deletes a S3 bucket.
-func DeleteBucket(ctx context.Context, svc DeleteBucketAPI, bucketName string) error {
+func makeEmpty(ctx context.Context, svc DeleteBucketAPI, bucket *Bucket) error {
 	p := s3.NewListObjectsV2Paginator(svc, &s3.ListObjectsV2Input{
-		Bucket: aws.String(bucketName),
+		Bucket: aws.String(bucket.name),
 	})
 	for p.HasMorePages() {
 		page, err := p.NextPage(ctx)
@@ -226,10 +205,22 @@ func DeleteBucket(ctx context.Context, svc DeleteBucketAPI, bucketName string) e
 		}
 		for _, obj := range page.Contents {
 			svc.DeleteObject(ctx, &s3.DeleteObjectInput{
-				Bucket: aws.String(bucketName),
+				Bucket: aws.String(bucket.name),
 				Key:    obj.Key,
 			})
 		}
+	}
+	return nil
+}
+
+// DeleteBucket deletes a S3 bucket.
+func DeleteBucket(ctx context.Context, svc DeleteBucketAPI, bucketName string) error {
+	log.Printf("🗑 deleting %q", bucketName)
+
+	if err := makeEmpty(ctx, svc, &Bucket{
+		name: bucketName,
+	}); err != nil {
+		return err
 	}
 
 	_, err := svc.DeleteBucket(ctx, &s3.DeleteBucketInput{
