@@ -1,6 +1,7 @@
 package cp
 
 import (
+	"bytes"
 	"context"
 	"io"
 	"os"
@@ -97,72 +98,72 @@ func TestCP_Upload(t *testing.T) {
 	}
 }
 
-// func TestCP_Upload_Multipart(t *testing.T) {
-// 	testutils.SkipIfUnitTest(t)
-// 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-// 	defer cancel()
+func TestCP_Upload_Multipart(t *testing.T) {
+	testutils.SkipIfUnitTest(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
 
-// 	svc, err := config.NewS3Client(ctx)
-// 	if err != nil {
-// 		t.Fatal(err)
-// 	}
-// 	bucketName, err := testutils.CreateTemporaryBucket(ctx, svc)
-// 	if err != nil {
-// 		t.Fatal(err)
-// 	}
-// 	defer testutils.DeleteBucket(context.Background(), svc, bucketName)
+	svc, err := config.NewS3Client(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bucket, err := pool.Get(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer pool.Put(bucket)
 
-// 	// prepare a test file
-// 	content := bytes.Repeat([]byte("temporary file's content"), 1024*1024)
-// 	dir, err := os.MkdirTemp("", "s3cli-mini")
-// 	if err != nil {
-// 		t.Fatal(err)
-// 	}
-// 	defer os.RemoveAll(dir)
-// 	filename := filepath.Join(dir, "tmpfile")
-// 	if err := os.WriteFile(filename, content, 0666); err != nil {
-// 		t.Fatal(err)
-// 	}
+	// prepare a test file
+	content := bytes.Repeat([]byte("temporary file's content"), 1024*1024)
+	dir, err := os.MkdirTemp("", "s3cli-mini")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(dir)
+	filename := filepath.Join(dir, "tmpfile")
+	if err := os.WriteFile(filename, content, 0666); err != nil {
+		t.Fatal(err)
+	}
 
-// 	// test
-// 	cmd := &cobra.Command{}
-// 	Run(cmd, []string{filename, "s3://" + bucketName + "/tmpfile.html"})
+	// test
+	cmd := &cobra.Command{}
+	Run(cmd, []string{filename, "s3://" + bucket.Name() + "/tmpfile.html"})
 
-// 	resp, err := svc.GetObject(ctx, &s3.GetObjectInput{
-// 		Bucket: aws.String(bucketName),
-// 		Key:    aws.String("tmpfile.html"),
-// 	})
-// 	if err != nil {
-// 		t.Fatal(err)
-// 	}
+	resp, err := svc.GetObject(ctx, &s3.GetObjectInput{
+		Bucket: aws.String(bucket.Name()),
+		Key:    aws.String("tmpfile.html"),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
 
-// 	// check body
-// 	body, err := io.ReadAll(resp.Body)
-// 	if err != nil {
-// 		t.Fatal(err)
-// 	}
-// 	resp.Body.Close()
-// 	if string(body) != string(content) {
-// 		t.Errorf("want %s, got %s", string(content), string(body))
-// 	}
-// 	if aws.ToString(resp.ContentType) != "text/html; charset=utf-8" {
-// 		t.Errorf("unexpected content-type: want %s, got %s", "text/html; charset-utf-8", aws.ToString(resp.ContentType))
-// 	}
+	// check body
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if string(body) != string(content) {
+		t.Errorf("want %s, got %s", string(content), string(body))
+	}
+	if aws.ToString(resp.ContentType) != "text/html; charset=utf-8" {
+		t.Errorf("unexpected content-type: want %s, got %s", "text/html; charset-utf-8", aws.ToString(resp.ContentType))
+	}
 
-// 	// check acl
-// 	retACL, err := svc.GetObjectAcl(ctx, &s3.GetObjectAclInput{
-// 		Bucket: aws.String(bucketName),
-// 		Key:    aws.String("tmpfile.html"),
-// 	})
-// 	if err != nil {
-// 		t.Fatal(err)
-// 	}
-// 	for _, g := range retACL.Grants {
-// 		if g.Grantee.Type != types.TypeCanonicalUser {
-// 			t.Errorf("unexpected grantee type, want %s, got %s", types.TypeCanonicalUser, g.Grantee.Type)
-// 		}
-// 	}
-// }
+	// check acl
+	retACL, err := svc.GetObjectAcl(ctx, &s3.GetObjectAclInput{
+		Bucket: aws.String(bucket.Name()),
+		Key:    aws.String("tmpfile.html"),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, g := range retACL.Grants {
+		if g.Grantee.Type != types.TypeCanonicalUser {
+			t.Errorf("unexpected grantee type, want %s, got %s", types.TypeCanonicalUser, g.Grantee.Type)
+		}
+	}
+}
 
 // func TestCP_Upload_KeyOmitted(t *testing.T) {
 // 	testutils.SkipIfUnitTest(t)
