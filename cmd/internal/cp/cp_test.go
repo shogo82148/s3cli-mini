@@ -365,50 +365,51 @@ func TestCP_Upload_recursive(t *testing.T) {
 	}
 }
 
-// func TestCP_Download(t *testing.T) {
-// 	testutils.SkipIfUnitTest(t)
-// 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-// 	defer cancel()
+func TestCP_Download(t *testing.T) {
+	t.Parallel()
+	testutils.SkipIfUnitTest(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
 
-// 	svc, err := config.NewS3Client(ctx)
-// 	if err != nil {
-// 		t.Fatal(err)
-// 	}
-// 	bucketName, err := testutils.CreateTemporaryBucket(ctx, svc)
-// 	if err != nil {
-// 		t.Fatal(err)
-// 	}
-// 	defer testutils.DeleteBucket(context.Background(), svc, bucketName)
+	svc, err := config.NewS3Client(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bucket, err := pool.Get(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer pool.Put(bucket)
 
-// 	// prepare a test object
-// 	content := []byte("temporary file's content")
-// 	_, err = svc.PutObject(ctx, &s3.PutObjectInput{
-// 		Body:   bytes.NewReader(content),
-// 		Bucket: aws.String(bucketName),
-// 		Key:    aws.String("tmpfile"),
-// 	})
-// 	if err != nil {
-// 		t.Fatal(err)
-// 	}
+	// prepare a test object
+	content := []byte("temporary file's content")
+	_, err = svc.PutObject(ctx, &s3.PutObjectInput{
+		Body:   bytes.NewReader(content),
+		Bucket: aws.String(bucket.Name()),
+		Key:    aws.String("tmpfile"),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
 
-// 	// test
-// 	dir, err := os.MkdirTemp("", "s3cli-mini")
-// 	if err != nil {
-// 		t.Fatal(err)
-// 	}
-// 	defer os.RemoveAll(dir)
-// 	filename := filepath.Join(dir, "tmpfile")
-// 	cmd := &cobra.Command{}
-// 	Run(cmd, []string{"s3://" + bucketName + "/tmpfile", filename})
+	// test
+	dir, err := os.MkdirTemp("", "s3cli-mini")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(dir)
+	filename := filepath.Join(dir, "tmpfile")
+	cmd := &cobra.Command{}
+	Run(cmd, []string{"s3://" + bucket.Name() + "/tmpfile", filename})
 
-// 	got, err := os.ReadFile(filename)
-// 	if err != nil {
-// 		t.Fatal(err)
-// 	}
-// 	if string(got) != string(content) {
-// 		t.Errorf("want %s, got %s", string(content), string(got))
-// 	}
-// }
+	got, err := os.ReadFile(filename)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != string(content) {
+		t.Errorf("want %s, got %s", string(content), string(got))
+	}
+}
 
 // func TestCP_DownloadRecursive(t *testing.T) {
 // 	testutils.SkipIfUnitTest(t)
