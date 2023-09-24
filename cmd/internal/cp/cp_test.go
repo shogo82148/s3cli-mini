@@ -830,51 +830,55 @@ func TestCP_DownloadToStdout(t *testing.T) {
 	}
 }
 
-// func TestCP_UploadStdin(t *testing.T) {
-// 	testutils.SkipIfUnitTest(t)
-// 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-// 	defer cancel()
+func TestCP_UploadFromStdin(t *testing.T) {
+	// This test overwrites the global variable `os.Stdin`.
+	// So, this test must be run in parallel.
+	// t.Parallel()
 
-// 	svc, err := config.NewS3Client(ctx)
-// 	if err != nil {
-// 		t.Fatal(err)
-// 	}
-// 	bucketName, err := testutils.CreateTemporaryBucket(ctx, svc)
-// 	if err != nil {
-// 		t.Fatal(err)
-// 	}
-// 	defer testutils.DeleteBucket(context.Background(), svc, bucketName)
+	testutils.SkipIfUnitTest(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
 
-// 	r, w, err := os.Pipe()
-// 	if err != nil {
-// 		t.Fatal(err)
-// 	}
-// 	defer r.Close()
-// 	go func() {
-// 		io.WriteString(w, "temporary file's content")
-// 		w.Close()
-// 	}()
-// 	origStdin := os.Stdin
-// 	defer func() { os.Stdin = origStdin }() // restore stdin
-// 	os.Stdin = r
+	svc, err := config.NewS3Client(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bucket, err := pool.Get(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer pool.Put(bucket)
 
-// 	cmd := &cobra.Command{}
-// 	Run(cmd, []string{"-", "s3://" + bucketName + "/tmpfile"})
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer r.Close()
+	go func() {
+		io.WriteString(w, "temporary file's content")
+		w.Close()
+	}()
+	origStdin := os.Stdin
+	defer func() { os.Stdin = origStdin }() // restore stdin
+	os.Stdin = r
 
-// 	// check body
-// 	resp, err := svc.GetObject(ctx, &s3.GetObjectInput{
-// 		Bucket: aws.String(bucketName),
-// 		Key:    aws.String("tmpfile"),
-// 	})
-// 	if err != nil {
-// 		t.Fatal(err)
-// 	}
-// 	body, err := io.ReadAll(resp.Body)
-// 	if err != nil {
-// 		t.Fatal(err)
-// 	}
-// 	resp.Body.Close()
-// 	if string(body) != "temporary file's content" {
-// 		t.Errorf("want %s, got %s", "temporary file's content", string(body))
-// 	}
-// }
+	cmd := &cobra.Command{}
+	Run(cmd, []string{"-", "s3://" + bucket.Name() + "/tmpfile"})
+
+	// check body
+	resp, err := svc.GetObject(ctx, &s3.GetObjectInput{
+		Bucket: aws.String(bucket.Name()),
+		Key:    aws.String("tmpfile"),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if string(body) != "temporary file's content" {
+		t.Errorf("want %s, got %s", "temporary file's content", string(body))
+	}
+}
