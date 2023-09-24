@@ -767,64 +767,68 @@ func TestCP_CopyRecursiveMultipart(t *testing.T) {
 	}
 }
 
-// func TestCP_DownloadToStdout(t *testing.T) {
-// 	testutils.SkipIfUnitTest(t)
-// 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-// 	defer cancel()
+func TestCP_DownloadToStdout(t *testing.T) {
+	// This test overwrites the global variable `os.Stdout`.
+	// So, this test must be run in parallel.
+	// t.Parallel()
 
-// 	svc, err := config.NewS3Client(ctx)
-// 	if err != nil {
-// 		t.Fatal(err)
-// 	}
-// 	bucketName, err := testutils.CreateTemporaryBucket(ctx, svc)
-// 	if err != nil {
-// 		t.Fatal(err)
-// 	}
-// 	defer testutils.DeleteBucket(context.Background(), svc, bucketName)
+	testutils.SkipIfUnitTest(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
 
-// 	// prepare a test object
-// 	content := []byte("temporary file's content")
-// 	_, err = svc.PutObject(ctx, &s3.PutObjectInput{
-// 		Body:   bytes.NewReader(content),
-// 		Bucket: aws.String(bucketName),
-// 		Key:    aws.String("tmpfile"),
-// 	})
-// 	if err != nil {
-// 		t.Fatal(err)
-// 	}
+	svc, err := config.NewS3Client(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bucket, err := pool.Get(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer pool.Put(bucket)
 
-// 	// test
-// 	r, w, err := os.Pipe()
-// 	if err != nil {
-// 		t.Fatal(err)
-// 	}
-// 	ch := make(chan struct {
-// 		str string
-// 		err error
-// 	}, 1)
-// 	go func() {
-// 		data, err := io.ReadAll(r)
-// 		ch <- struct {
-// 			str string
-// 			err error
-// 		}{string(data), err}
-// 	}()
-// 	origStdout := os.Stdout
-// 	defer func() { os.Stdout = origStdout }() // restore stdout
-// 	os.Stdout = w
+	// prepare a test object
+	content := []byte("temporary file's content")
+	_, err = svc.PutObject(ctx, &s3.PutObjectInput{
+		Body:   bytes.NewReader(content),
+		Bucket: aws.String(bucket.Name()),
+		Key:    aws.String("tmpfile"),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
 
-// 	cmd := &cobra.Command{}
-// 	Run(cmd, []string{"s3://" + bucketName + "/tmpfile", "-"})
-// 	w.Close()
+	// test
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	ch := make(chan struct {
+		str string
+		err error
+	}, 1)
+	go func() {
+		data, err := io.ReadAll(r)
+		ch <- struct {
+			str string
+			err error
+		}{string(data), err}
+	}()
+	origStdout := os.Stdout
+	defer func() { os.Stdout = origStdout }() // restore stdout
+	os.Stdout = w
 
-// 	got := <-ch
-// 	if got.err != nil {
-// 		t.Fatal(err)
-// 	}
-// 	if string(got.str) != string(content) {
-// 		t.Errorf("want %s, got %s", string(content), string(got.str))
-// 	}
-// }
+	cmd := &cobra.Command{}
+	Run(cmd, []string{"s3://" + bucket.Name() + "/tmpfile", "-"})
+	w.Close()
+
+	got := <-ch
+	if got.err != nil {
+		t.Fatal(err)
+	}
+	if string(got.str) != string(content) {
+		t.Errorf("want %s, got %s", string(content), string(got.str))
+	}
+}
 
 // func TestCP_UploadStdin(t *testing.T) {
 // 	testutils.SkipIfUnitTest(t)
