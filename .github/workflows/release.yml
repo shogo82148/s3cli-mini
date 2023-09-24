@@ -7,6 +7,9 @@ on:
 
 jobs:
   goreleaser:
+    permissions:
+      contents: read
+      id-token: write
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
