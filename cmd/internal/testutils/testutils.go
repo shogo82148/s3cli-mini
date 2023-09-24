@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
-	"log"
 	"os"
 	"testing"
 	"time"
@@ -34,7 +33,6 @@ func CreateTemporaryBucket(ctx context.Context, svc interfaces.S3Client) (string
 		return "", err
 	}
 	bucketName := bucketPrefix() + hex.EncodeToString(b[:])
-	log.Println("creating a new bucket:", bucketName)
 
 	cfg, err := config.LoadDefaultConfig(ctx)
 	if err != nil {
@@ -47,10 +45,11 @@ func CreateTemporaryBucket(ctx context.Context, svc interfaces.S3Client) (string
 	input := &s3.CreateBucketInput{
 		Bucket: aws.String(bucketName),
 	}
-	input.CreateBucketConfiguration = &types.CreateBucketConfiguration{
-		LocationConstraint: types.BucketLocationConstraint(region),
+	if region != "us-east-1" {
+		input.CreateBucketConfiguration = &types.CreateBucketConfiguration{
+			LocationConstraint: types.BucketLocationConstraint(region),
+		}
 	}
-	log.Println("region:", region)
 	_, err = svc.CreateBucket(ctx, input)
 	if err != nil {
 		return "", err
