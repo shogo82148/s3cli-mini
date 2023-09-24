@@ -19,6 +19,7 @@ import (
 )
 
 var pool *testutils.BucketPool
+var enabledACLPool *testutils.BucketPool
 
 func TestMain(m *testing.M) {
 	svc, err := config.NewS3Client(context.Background())
@@ -27,6 +28,11 @@ func TestMain(m *testing.M) {
 	}
 	pool = testutils.NewBucketPool(nil, svc, 5)
 	defer pool.Cleanup(context.Background())
+
+	enabledACLPool = testutils.NewBucketPool(&s3.CreateBucketInput{
+		ObjectOwnership: types.ObjectOwnershipBucketOwnerPreferred,
+	}, svc, 5)
+	defer enabledACLPool.Cleanup(context.Background())
 
 	m.Run()
 }
@@ -216,78 +222,95 @@ func TestCP_Upload_KeyOmitted(t *testing.T) {
 	}
 }
 
-// func TestCP_UploadPublicACL(t *testing.T) {
-// 	testutils.SkipIfUnitTest(t)
-// 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-// 	defer cancel()
+func TestCP_UploadPublicACL(t *testing.T) {
+	// This test overwrites the global variable `acl`.
+	// So, this test must be run in parallel.
+	// t.Parallel()
 
-// 	svc, err := config.NewS3Client(ctx)
-// 	if err != nil {
-// 		t.Fatal(err)
-// 	}
-// 	bucketName, err := testutils.CreateTemporaryBucket(ctx, svc)
-// 	if err != nil {
-// 		t.Fatal(err)
-// 	}
-// 	defer testutils.DeleteBucket(context.Background(), svc, bucketName)
+	testutils.SkipIfUnitTest(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
 
-// 	// prepare a test file
-// 	content := []byte("temporary file's content")
-// 	dir, err := os.MkdirTemp("", "s3cli-mini")
-// 	if err != nil {
-// 		t.Fatal(err)
-// 	}
-// 	defer os.RemoveAll(dir)
-// 	filename := filepath.Join(dir, "tmpfile")
-// 	if err := os.WriteFile(filename, content, 0666); err != nil {
-// 		t.Fatal(err)
-// 	}
+	svc, err := config.NewS3Client(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bucket, err := enabledACLPool.Get(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
 
-// 	// test
-// 	acl = "public-read"
-// 	defer func() {
-// 		acl = ""
-// 	}()
-// 	cmd := &cobra.Command{}
-// 	Run(cmd, []string{filename, "s3://" + bucketName + "/tmpfile"})
+	// allow public access
+	_, err = svc.PutPublicAccessBlock(ctx, &s3.PutPublicAccessBlockInput{
+		Bucket: aws.String(bucket.Name()),
+		PublicAccessBlockConfiguration: &types.PublicAccessBlockConfiguration{
+			BlockPublicAcls:       false,
+			BlockPublicPolicy:     false,
+			IgnorePublicAcls:      false,
+			RestrictPublicBuckets: true,
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
 
-// 	resp, err := svc.GetObject(ctx, &s3.GetObjectInput{
-// 		Bucket: aws.String(bucketName),
-// 		Key:    aws.String("tmpfile"),
-// 	})
-// 	if err != nil {
-// 		t.Fatal(err)
-// 	}
+	// prepare a test file
+	content := []byte("temporary file's content")
+	dir, err := os.MkdirTemp("", "s3cli-mini")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(dir)
+	filename := filepath.Join(dir, "tmpfile")
+	if err := os.WriteFile(filename, content, 0666); err != nil {
+		t.Fatal(err)
+	}
 
-// 	// check body
-// 	body, err := io.ReadAll(resp.Body)
-// 	if err != nil {
-// 		t.Fatal(err)
-// 	}
-// 	resp.Body.Close()
-// 	if string(body) != string(content) {
-// 		t.Errorf("want %s, got %s", string(content), string(body))
-// 	}
+	// test
+	acl = "public-read"
+	defer func() {
+		acl = ""
+	}()
+	cmd := &cobra.Command{}
+	Run(cmd, []string{filename, "s3://" + bucket.Name() + "/tmpfile"})
 
-// 	// check acl
-// 	retACL, err := svc.GetObjectAcl(ctx, &s3.GetObjectAclInput{
-// 		Bucket: aws.String(bucketName),
-// 		Key:    aws.String("tmpfile"),
-// 	})
-// 	if err != nil {
-// 		t.Fatal(err)
-// 	}
-// 	var publicRead bool
-// 	for _, g := range retACL.Grants {
-// 		publicRead = publicRead ||
-// 			(g.Grantee.Type == types.TypeGroup &&
-// 				aws.ToString(g.Grantee.URI) == "http://acs.amazonaws.com/groups/global/AllUsers" &&
-// 				g.Permission == types.PermissionRead)
-// 	}
-// 	if !publicRead {
-// 		t.Error("unexpected acl: want public-read, but not")
-// 	}
-// }
+	resp, err := svc.GetObject(ctx, &s3.GetObjectInput{
+		Bucket: aws.String(bucket.Name()),
+		Key:    aws.String("tmpfile"),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// check body
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if string(body) != string(content) {
+		t.Errorf("want %s, got %s", string(content), string(body))
+	}
+
+	// check acl
+	retACL, err := svc.GetObjectAcl(ctx, &s3.GetObjectAclInput{
+		Bucket: aws.String(bucket.Name()),
+		Key:    aws.String("tmpfile"),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var publicRead bool
+	for _, g := range retACL.Grants {
+		publicRead = publicRead ||
+			(g.Grantee.Type == types.TypeGroup &&
+				aws.ToString(g.Grantee.URI) == "http://acs.amazonaws.com/groups/global/AllUsers" &&
+				g.Permission == types.PermissionRead)
+	}
+	if !publicRead {
+		t.Error("unexpected acl: want public-read, but not")
+	}
+}
 
 func TestCP_Upload_recursive(t *testing.T) {
 	// This test overwrites the global variable `recursive`.
