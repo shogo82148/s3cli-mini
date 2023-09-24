@@ -33,13 +33,12 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-go-
       - run: go mod download
-
       - name: Configure AWS Credentials
         uses: fuller-inc/actions-aws-assume-role@v1
         continue-on-error: true
         with:
           aws-region: us-east-1
-          role-to-assume: arn:aws:iam::445285296882:role/main-stack-S3CLI-R7CPXMJBV8JQ-TestRole-1EF9TX5KNO0QH
+          role-to-assume: arn:aws:iam::455234978633:role/s3cli-mini-TestRole6C9272DF-7K8JPM7FCTP9
           role-session-tagging: true
 
       - name: Test
