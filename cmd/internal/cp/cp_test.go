@@ -528,57 +528,58 @@ func TestCP_Copy(t *testing.T) {
 	}
 }
 
-// func TestCP_CopyMultipart(t *testing.T) {
-// 	testutils.SkipIfUnitTest(t)
-// 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-// 	defer cancel()
+func TestCP_CopyMultipart(t *testing.T) {
+	t.Parallel()
+	testutils.SkipIfUnitTest(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
 
-// 	svc, err := config.NewS3Client(ctx)
-// 	if err != nil {
-// 		t.Fatal(err)
-// 	}
-// 	bucketName, err := testutils.CreateTemporaryBucket(ctx, svc)
-// 	if err != nil {
-// 		t.Fatal(err)
-// 	}
-// 	defer testutils.DeleteBucket(context.Background(), svc, bucketName)
+	svc, err := config.NewS3Client(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bucket, err := pool.Get(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer pool.Put(bucket)
 
-// 	// prepare a test object
-// 	content := bytes.Repeat([]byte("temporary file's content"), 1024*1024)
-// 	_, err = svc.PutObject(ctx, &s3.PutObjectInput{
-// 		Body:   bytes.NewReader(content),
-// 		Bucket: aws.String(bucketName),
-// 		Key:    aws.String("tmpfile"),
-// 	})
-// 	if err != nil {
-// 		t.Fatal(err)
-// 	}
+	// prepare a test object
+	content := bytes.Repeat([]byte("temporary file's content"), 1024*1024)
+	_, err = svc.PutObject(ctx, &s3.PutObjectInput{
+		Body:   bytes.NewReader(content),
+		Bucket: aws.String(bucket.Name()),
+		Key:    aws.String("tmpfile"),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
 
-// 	original := maxCopyObjectBytes
-// 	maxCopyObjectBytes = 5 * 1024 * 1024
-// 	defer func() {
-// 		maxCopyObjectBytes = original
-// 	}()
-// 	cmd := &cobra.Command{}
-// 	Run(cmd, []string{"s3://" + bucketName + "/tmpfile", "s3://" + bucketName + "/tmpfile.copy"})
+	original := maxCopyObjectBytes
+	maxCopyObjectBytes = 5 * 1024 * 1024
+	defer func() {
+		maxCopyObjectBytes = original
+	}()
+	cmd := &cobra.Command{}
+	Run(cmd, []string{"s3://" + bucket.Name() + "/tmpfile", "s3://" + bucket.Name() + "/tmpfile.copy"})
 
-// 	// check body
-// 	resp, err := svc.GetObject(ctx, &s3.GetObjectInput{
-// 		Bucket: aws.String(bucketName),
-// 		Key:    aws.String("tmpfile.copy"),
-// 	})
-// 	if err != nil {
-// 		t.Fatal(err)
-// 	}
-// 	body, err := io.ReadAll(resp.Body)
-// 	if err != nil {
-// 		t.Fatal(err)
-// 	}
-// 	resp.Body.Close()
-// 	if string(body) != string(content) {
-// 		t.Errorf("want %s, got %s", string(content), string(body))
-// 	}
-// }
+	// check body
+	resp, err := svc.GetObject(ctx, &s3.GetObjectInput{
+		Bucket: aws.String(bucket.Name()),
+		Key:    aws.String("tmpfile.copy"),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if string(body) != string(content) {
+		t.Errorf("want %s, got %s", string(content), string(body))
+	}
+}
 
 // func TestCP_CopyRecursive(t *testing.T) {
 // 	testutils.SkipIfUnitTest(t)
