@@ -18,7 +18,27 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
+var pool *testutils.BucketPool
+var enabledACLPool *testutils.BucketPool
+
+func TestMain(m *testing.M) {
+	svc, err := config.NewS3Client(context.Background())
+	if err != nil {
+		panic(err)
+	}
+	pool = testutils.NewBucketPool(nil, svc, 5)
+	defer pool.Cleanup(context.Background())
+
+	enabledACLPool = testutils.NewBucketPool(&s3.CreateBucketInput{
+		ObjectOwnership: types.ObjectOwnershipBucketOwnerPreferred,
+	}, svc, 5)
+	defer enabledACLPool.Cleanup(context.Background())
+
+	m.Run()
+}
+
 func TestCP_Upload(t *testing.T) {
+	t.Parallel()
 	testutils.SkipIfUnitTest(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -27,11 +47,11 @@ func TestCP_Upload(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	bucketName, err := testutils.CreateTemporaryBucket(ctx, svc)
+	bucket, err := pool.Get(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer testutils.DeleteBucket(context.Background(), svc, bucketName)
+	defer pool.Put(bucket)
 
 	// prepare a test file
 	content := []byte("temporary file's content")
@@ -47,10 +67,10 @@ func TestCP_Upload(t *testing.T) {
 
 	// test
 	cmd := &cobra.Command{}
-	Run(cmd, []string{filename, "s3://" + bucketName + "/tmpfile.html"})
+	Run(cmd, []string{filename, "s3://" + bucket.Name() + "/tmpfile.html"})
 
 	resp, err := svc.GetObject(ctx, &s3.GetObjectInput{
-		Bucket: aws.String(bucketName),
+		Bucket: aws.String(bucket.Name()),
 		Key:    aws.String("tmpfile.html"),
 	})
 	if err != nil {
@@ -72,7 +92,7 @@ func TestCP_Upload(t *testing.T) {
 
 	// check acl
 	retACL, err := svc.GetObjectAcl(ctx, &s3.GetObjectAclInput{
-		Bucket: aws.String(bucketName),
+		Bucket: aws.String(bucket.Name()),
 		Key:    aws.String("tmpfile.html"),
 	})
 	if err != nil {
@@ -86,6 +106,7 @@ func TestCP_Upload(t *testing.T) {
 }
 
 func TestCP_Upload_Multipart(t *testing.T) {
+	t.Parallel()
 	testutils.SkipIfUnitTest(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -94,11 +115,11 @@ func TestCP_Upload_Multipart(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	bucketName, err := testutils.CreateTemporaryBucket(ctx, svc)
+	bucket, err := pool.Get(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer testutils.DeleteBucket(context.Background(), svc, bucketName)
+	defer pool.Put(bucket)
 
 	// prepare a test file
 	content := bytes.Repeat([]byte("temporary file's content"), 1024*1024)
@@ -114,10 +135,10 @@ func TestCP_Upload_Multipart(t *testing.T) {
 
 	// test
 	cmd := &cobra.Command{}
-	Run(cmd, []string{filename, "s3://" + bucketName + "/tmpfile.html"})
+	Run(cmd, []string{filename, "s3://" + bucket.Name() + "/tmpfile.html"})
 
 	resp, err := svc.GetObject(ctx, &s3.GetObjectInput{
-		Bucket: aws.String(bucketName),
+		Bucket: aws.String(bucket.Name()),
 		Key:    aws.String("tmpfile.html"),
 	})
 	if err != nil {
@@ -139,7 +160,7 @@ func TestCP_Upload_Multipart(t *testing.T) {
 
 	// check acl
 	retACL, err := svc.GetObjectAcl(ctx, &s3.GetObjectAclInput{
-		Bucket: aws.String(bucketName),
+		Bucket: aws.String(bucket.Name()),
 		Key:    aws.String("tmpfile.html"),
 	})
 	if err != nil {
@@ -153,6 +174,7 @@ func TestCP_Upload_Multipart(t *testing.T) {
 }
 
 func TestCP_Upload_KeyOmitted(t *testing.T) {
+	t.Parallel()
 	testutils.SkipIfUnitTest(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -161,11 +183,11 @@ func TestCP_Upload_KeyOmitted(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	bucketName, err := testutils.CreateTemporaryBucket(ctx, svc)
+	bucket, err := pool.Get(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer testutils.DeleteBucket(context.Background(), svc, bucketName)
+	defer pool.Put(bucket)
 
 	// prepare a test file
 	content := []byte("temporary file's content")
@@ -181,10 +203,10 @@ func TestCP_Upload_KeyOmitted(t *testing.T) {
 
 	// test
 	cmd := &cobra.Command{}
-	Run(cmd, []string{filename, "s3://" + bucketName})
+	Run(cmd, []string{filename, "s3://" + bucket.Name()})
 
 	resp, err := svc.GetObject(ctx, &s3.GetObjectInput{
-		Bucket: aws.String(bucketName),
+		Bucket: aws.String(bucket.Name()),
 		Key:    aws.String("tmpfile"),
 	})
 	if err != nil {
@@ -201,6 +223,10 @@ func TestCP_Upload_KeyOmitted(t *testing.T) {
 }
 
 func TestCP_UploadPublicACL(t *testing.T) {
+	// This test overwrites the global variable `acl`.
+	// So, this test must be run in parallel.
+	// t.Parallel()
+
 	testutils.SkipIfUnitTest(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -209,11 +235,24 @@ func TestCP_UploadPublicACL(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	bucketName, err := testutils.CreateTemporaryBucket(ctx, svc)
+	bucket, err := enabledACLPool.Get(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer testutils.DeleteBucket(context.Background(), svc, bucketName)
+
+	// allow public access
+	_, err = svc.PutPublicAccessBlock(ctx, &s3.PutPublicAccessBlockInput{
+		Bucket: aws.String(bucket.Name()),
+		PublicAccessBlockConfiguration: &types.PublicAccessBlockConfiguration{
+			BlockPublicAcls:       false,
+			BlockPublicPolicy:     false,
+			IgnorePublicAcls:      false,
+			RestrictPublicBuckets: true,
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	// prepare a test file
 	content := []byte("temporary file's content")
@@ -233,10 +272,10 @@ func TestCP_UploadPublicACL(t *testing.T) {
 		acl = ""
 	}()
 	cmd := &cobra.Command{}
-	Run(cmd, []string{filename, "s3://" + bucketName + "/tmpfile"})
+	Run(cmd, []string{filename, "s3://" + bucket.Name() + "/tmpfile"})
 
 	resp, err := svc.GetObject(ctx, &s3.GetObjectInput{
-		Bucket: aws.String(bucketName),
+		Bucket: aws.String(bucket.Name()),
 		Key:    aws.String("tmpfile"),
 	})
 	if err != nil {
@@ -255,7 +294,7 @@ func TestCP_UploadPublicACL(t *testing.T) {
 
 	// check acl
 	retACL, err := svc.GetObjectAcl(ctx, &s3.GetObjectAclInput{
-		Bucket: aws.String(bucketName),
+		Bucket: aws.String(bucket.Name()),
 		Key:    aws.String("tmpfile"),
 	})
 	if err != nil {
@@ -274,6 +313,10 @@ func TestCP_UploadPublicACL(t *testing.T) {
 }
 
 func TestCP_Upload_recursive(t *testing.T) {
+	// This test overwrites the global variable `recursive`.
+	// So, this test must be run in parallel.
+	// t.Parallel()
+
 	testutils.SkipIfUnitTest(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -282,11 +325,11 @@ func TestCP_Upload_recursive(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	bucketName, err := testutils.CreateTemporaryBucket(ctx, svc)
+	bucket, err := pool.Get(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer testutils.DeleteBucket(context.Background(), svc, bucketName)
+	defer pool.Put(bucket)
 
 	// prepare test files
 	content := []byte("temporary file's content")
@@ -324,12 +367,12 @@ func TestCP_Upload_recursive(t *testing.T) {
 		recursive = false
 	}()
 	cmd := &cobra.Command{}
-	Run(cmd, []string{dir, "s3://" + bucketName})
+	Run(cmd, []string{dir, "s3://" + bucket.Name()})
 
 	// check body
 	for _, key := range keys {
 		resp, err := svc.GetObject(ctx, &s3.GetObjectInput{
-			Bucket: aws.String(bucketName),
+			Bucket: aws.String(bucket.Name()),
 			Key:    aws.String(key),
 		})
 		if err != nil {
@@ -347,6 +390,7 @@ func TestCP_Upload_recursive(t *testing.T) {
 }
 
 func TestCP_Download(t *testing.T) {
+	t.Parallel()
 	testutils.SkipIfUnitTest(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -355,17 +399,17 @@ func TestCP_Download(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	bucketName, err := testutils.CreateTemporaryBucket(ctx, svc)
+	bucket, err := pool.Get(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer testutils.DeleteBucket(context.Background(), svc, bucketName)
+	defer pool.Put(bucket)
 
 	// prepare a test object
 	content := []byte("temporary file's content")
 	_, err = svc.PutObject(ctx, &s3.PutObjectInput{
 		Body:   bytes.NewReader(content),
-		Bucket: aws.String(bucketName),
+		Bucket: aws.String(bucket.Name()),
 		Key:    aws.String("tmpfile"),
 	})
 	if err != nil {
@@ -380,7 +424,7 @@ func TestCP_Download(t *testing.T) {
 	defer os.RemoveAll(dir)
 	filename := filepath.Join(dir, "tmpfile")
 	cmd := &cobra.Command{}
-	Run(cmd, []string{"s3://" + bucketName + "/tmpfile", filename})
+	Run(cmd, []string{"s3://" + bucket.Name() + "/tmpfile", filename})
 
 	got, err := os.ReadFile(filename)
 	if err != nil {
@@ -391,7 +435,11 @@ func TestCP_Download(t *testing.T) {
 	}
 }
 
-func TestCP_DownloadRecursive(t *testing.T) {
+func TestCP_Download_recursive(t *testing.T) {
+	// This test overwrites the global variable `recursive`.
+	// So, this test must be run in parallel.
+	// t.Parallel()
+
 	testutils.SkipIfUnitTest(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -400,11 +448,11 @@ func TestCP_DownloadRecursive(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	bucketName, err := testutils.CreateTemporaryBucket(ctx, svc)
+	bucket, err := pool.Get(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer testutils.DeleteBucket(context.Background(), svc, bucketName)
+	defer pool.Put(bucket)
 
 	// prepare a test object
 	content := []byte("temporary file's content")
@@ -428,7 +476,7 @@ func TestCP_DownloadRecursive(t *testing.T) {
 	for _, key := range keys {
 		_, err = svc.PutObject(ctx, &s3.PutObjectInput{
 			Body:   bytes.NewReader(content),
-			Bucket: aws.String(bucketName),
+			Bucket: aws.String(bucket.Name()),
 			Key:    aws.String(key),
 		})
 		if err != nil {
@@ -442,7 +490,7 @@ func TestCP_DownloadRecursive(t *testing.T) {
 		recursive = false
 	}()
 	cmd := &cobra.Command{}
-	Run(cmd, []string{"s3://" + bucketName + "/", dir})
+	Run(cmd, []string{"s3://" + bucket.Name() + "/", dir})
 
 	for _, key := range keys {
 		filename := filepath.Join(dir, filepath.FromSlash(key))
@@ -457,6 +505,7 @@ func TestCP_DownloadRecursive(t *testing.T) {
 }
 
 func TestCP_Copy(t *testing.T) {
+	t.Parallel()
 	testutils.SkipIfUnitTest(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -465,17 +514,17 @@ func TestCP_Copy(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	bucketName, err := testutils.CreateTemporaryBucket(ctx, svc)
+	bucket, err := pool.Get(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer testutils.DeleteBucket(context.Background(), svc, bucketName)
+	defer pool.Put(bucket)
 
 	// prepare a test object
 	content := []byte("temporary file's content")
 	_, err = svc.PutObject(ctx, &s3.PutObjectInput{
 		Body:   bytes.NewReader(content),
-		Bucket: aws.String(bucketName),
+		Bucket: aws.String(bucket.Name()),
 		Key:    aws.String("tmpfile"),
 	})
 	if err != nil {
@@ -483,11 +532,11 @@ func TestCP_Copy(t *testing.T) {
 	}
 
 	cmd := &cobra.Command{}
-	Run(cmd, []string{"s3://" + bucketName + "/tmpfile", "s3://" + bucketName + "/tmpfile.copy"})
+	Run(cmd, []string{"s3://" + bucket.Name() + "/tmpfile", "s3://" + bucket.Name() + "/tmpfile.copy"})
 
 	// check body
 	resp, err := svc.GetObject(ctx, &s3.GetObjectInput{
-		Bucket: aws.String(bucketName),
+		Bucket: aws.String(bucket.Name()),
 		Key:    aws.String("tmpfile.copy"),
 	})
 	if err != nil {
@@ -504,6 +553,10 @@ func TestCP_Copy(t *testing.T) {
 }
 
 func TestCP_CopyMultipart(t *testing.T) {
+	// This test overwrites the global variable `maxCopyObjectBytes`.
+	// So, this test must be run in parallel.
+	// t.Parallel()
+
 	testutils.SkipIfUnitTest(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -512,17 +565,17 @@ func TestCP_CopyMultipart(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	bucketName, err := testutils.CreateTemporaryBucket(ctx, svc)
+	bucket, err := pool.Get(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer testutils.DeleteBucket(context.Background(), svc, bucketName)
+	defer pool.Put(bucket)
 
 	// prepare a test object
 	content := bytes.Repeat([]byte("temporary file's content"), 1024*1024)
 	_, err = svc.PutObject(ctx, &s3.PutObjectInput{
 		Body:   bytes.NewReader(content),
-		Bucket: aws.String(bucketName),
+		Bucket: aws.String(bucket.Name()),
 		Key:    aws.String("tmpfile"),
 	})
 	if err != nil {
@@ -535,11 +588,11 @@ func TestCP_CopyMultipart(t *testing.T) {
 		maxCopyObjectBytes = original
 	}()
 	cmd := &cobra.Command{}
-	Run(cmd, []string{"s3://" + bucketName + "/tmpfile", "s3://" + bucketName + "/tmpfile.copy"})
+	Run(cmd, []string{"s3://" + bucket.Name() + "/tmpfile", "s3://" + bucket.Name() + "/tmpfile.copy"})
 
 	// check body
 	resp, err := svc.GetObject(ctx, &s3.GetObjectInput{
-		Bucket: aws.String(bucketName),
+		Bucket: aws.String(bucket.Name()),
 		Key:    aws.String("tmpfile.copy"),
 	})
 	if err != nil {
@@ -556,6 +609,10 @@ func TestCP_CopyMultipart(t *testing.T) {
 }
 
 func TestCP_CopyRecursive(t *testing.T) {
+	// This test overwrites the global variable `recursive` and `maxCopyObjectBytes`.
+	// So, this test must be run in parallel.
+	// t.Parallel()
+
 	testutils.SkipIfUnitTest(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -564,11 +621,11 @@ func TestCP_CopyRecursive(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	bucketName, err := testutils.CreateTemporaryBucket(ctx, svc)
+	bucket, err := pool.Get(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer testutils.DeleteBucket(context.Background(), svc, bucketName)
+	defer pool.Put(bucket)
 
 	// prepare test files
 	content := []byte("temporary file's content")
@@ -592,7 +649,7 @@ func TestCP_CopyRecursive(t *testing.T) {
 	for _, key := range keys {
 		_, err := svc.PutObject(ctx, &s3.PutObjectInput{
 			Body:   bytes.NewReader(content),
-			Bucket: aws.String(bucketName),
+			Bucket: aws.String(bucket.Name()),
 			Key:    aws.String(key),
 		})
 		if err != nil {
@@ -608,7 +665,7 @@ func TestCP_CopyRecursive(t *testing.T) {
 		maxCopyObjectBytes = original
 	}()
 	cmd := &cobra.Command{}
-	Run(cmd, []string{"s3://" + bucketName + "/foo", "s3://" + bucketName + "/fizz"})
+	Run(cmd, []string{"s3://" + bucket.Name() + "/foo", "s3://" + bucket.Name() + "/fizz"})
 
 	// check body
 	expected := []string{
@@ -622,7 +679,7 @@ func TestCP_CopyRecursive(t *testing.T) {
 	}
 	for _, key := range expected {
 		resp, err := svc.GetObject(ctx, &s3.GetObjectInput{
-			Bucket: aws.String(bucketName),
+			Bucket: aws.String(bucket.Name()),
 			Key:    aws.String(key),
 		})
 		if err != nil {
@@ -640,6 +697,10 @@ func TestCP_CopyRecursive(t *testing.T) {
 }
 
 func TestCP_CopyRecursiveMultipart(t *testing.T) {
+	// This test overwrites the global variable `recursive` and `maxCopyObjectBytes`.
+	// So, this test must be run in parallel.
+	// t.Parallel()
+
 	testutils.SkipIfUnitTest(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -648,11 +709,11 @@ func TestCP_CopyRecursiveMultipart(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	bucketName, err := testutils.CreateTemporaryBucket(ctx, svc)
+	bucket, err := pool.Get(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer testutils.DeleteBucket(context.Background(), svc, bucketName)
+	defer pool.Put(bucket)
 
 	// prepare test objects
 	content := bytes.Repeat([]byte("temporary"), 1024*1024)
@@ -674,7 +735,7 @@ func TestCP_CopyRecursiveMultipart(t *testing.T) {
 			g.Go(func() error {
 				_, err := svc.PutObject(ctx, &s3.PutObjectInput{
 					Body:   bytes.NewReader(content),
-					Bucket: aws.String(bucketName),
+					Bucket: aws.String(bucket.Name()),
 					Key:    aws.String(key),
 				})
 				return err
@@ -693,7 +754,7 @@ func TestCP_CopyRecursiveMultipart(t *testing.T) {
 		recursive = false
 	}()
 	cmd := &cobra.Command{}
-	Run(cmd, []string{"s3://" + bucketName + "/foo", "s3://" + bucketName + "/fizz"})
+	Run(cmd, []string{"s3://" + bucket.Name() + "/foo", "s3://" + bucket.Name() + "/fizz"})
 
 	// check body
 	expected := []string{
@@ -706,7 +767,7 @@ func TestCP_CopyRecursiveMultipart(t *testing.T) {
 			key := key
 			g.Go(func() error {
 				resp, err := svc.GetObject(ctx, &s3.GetObjectInput{
-					Bucket: aws.String(bucketName),
+					Bucket: aws.String(bucket.Name()),
 					Key:    aws.String(key),
 				})
 				if err != nil {
@@ -729,7 +790,11 @@ func TestCP_CopyRecursiveMultipart(t *testing.T) {
 	}
 }
 
-func TestCP_DownloadStdout(t *testing.T) {
+func TestCP_DownloadToStdout(t *testing.T) {
+	// This test overwrites the global variable `os.Stdout`.
+	// So, this test must be run in parallel.
+	// t.Parallel()
+
 	testutils.SkipIfUnitTest(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -738,17 +803,17 @@ func TestCP_DownloadStdout(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	bucketName, err := testutils.CreateTemporaryBucket(ctx, svc)
+	bucket, err := pool.Get(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer testutils.DeleteBucket(context.Background(), svc, bucketName)
+	defer pool.Put(bucket)
 
 	// prepare a test object
 	content := []byte("temporary file's content")
 	_, err = svc.PutObject(ctx, &s3.PutObjectInput{
 		Body:   bytes.NewReader(content),
-		Bucket: aws.String(bucketName),
+		Bucket: aws.String(bucket.Name()),
 		Key:    aws.String("tmpfile"),
 	})
 	if err != nil {
@@ -776,7 +841,7 @@ func TestCP_DownloadStdout(t *testing.T) {
 	os.Stdout = w
 
 	cmd := &cobra.Command{}
-	Run(cmd, []string{"s3://" + bucketName + "/tmpfile", "-"})
+	Run(cmd, []string{"s3://" + bucket.Name() + "/tmpfile", "-"})
 	w.Close()
 
 	got := <-ch
@@ -788,7 +853,11 @@ func TestCP_DownloadStdout(t *testing.T) {
 	}
 }
 
-func TestCP_UploadStdin(t *testing.T) {
+func TestCP_UploadFromStdin(t *testing.T) {
+	// This test overwrites the global variable `os.Stdin`.
+	// So, this test must be run in parallel.
+	// t.Parallel()
+
 	testutils.SkipIfUnitTest(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -797,11 +866,11 @@ func TestCP_UploadStdin(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	bucketName, err := testutils.CreateTemporaryBucket(ctx, svc)
+	bucket, err := pool.Get(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer testutils.DeleteBucket(context.Background(), svc, bucketName)
+	defer pool.Put(bucket)
 
 	r, w, err := os.Pipe()
 	if err != nil {
@@ -817,11 +886,11 @@ func TestCP_UploadStdin(t *testing.T) {
 	os.Stdin = r
 
 	cmd := &cobra.Command{}
-	Run(cmd, []string{"-", "s3://" + bucketName + "/tmpfile"})
+	Run(cmd, []string{"-", "s3://" + bucket.Name() + "/tmpfile"})
 
 	// check body
 	resp, err := svc.GetObject(ctx, &s3.GetObjectInput{
-		Bucket: aws.String(bucketName),
+		Bucket: aws.String(bucket.Name()),
 		Key:    aws.String("tmpfile"),
 	})
 	if err != nil {

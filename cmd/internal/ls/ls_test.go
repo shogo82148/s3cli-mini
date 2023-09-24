@@ -16,10 +16,23 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func prepareBucket(ctx context.Context, svc interfaces.S3Client) (string, error) {
-	bucketName, err := testutils.CreateTemporaryBucket(ctx, svc)
+var pool *testutils.BucketPool
+
+func TestMain(m *testing.M) {
+	svc, err := config.NewS3Client(context.Background())
 	if err != nil {
-		return "", err
+		panic(err)
+	}
+	pool = testutils.NewBucketPool(nil, svc, 1)
+	defer pool.Cleanup(context.Background())
+
+	m.Run()
+}
+
+func prepareBucket(ctx context.Context, svc interfaces.S3Client) (*testutils.Bucket, error) {
+	bucket, err := pool.Get(ctx)
+	if err != nil {
+		return nil, err
 	}
 
 	keys := []string{
@@ -39,20 +52,20 @@ func prepareBucket(ctx context.Context, svc interfaces.S3Client) (string, error)
 	for _, key := range keys {
 		key := key
 		_, err = svc.PutObject(ctx, &s3.PutObjectInput{
-			Bucket: aws.String(bucketName),
+			Bucket: aws.String(bucket.Name()),
 			Key:    aws.String(key),
 			Body:   strings.NewReader(key),
 		})
 		if err != nil {
-			testutils.DeleteBucket(ctx, svc, bucketName)
-			return "", err
+			return nil, err
 		}
 	}
 
-	return bucketName, nil
+	return bucket, nil
 }
 
 func TestLS_ListObjects(t *testing.T) {
+	t.Parallel()
 	testutils.SkipIfUnitTest(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -61,17 +74,17 @@ func TestLS_ListObjects(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	bucketName, err := prepareBucket(ctx, svc)
+	bucket, err := prepareBucket(ctx, svc)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer testutils.DeleteBucket(context.Background(), svc, bucketName)
+	defer pool.Put(bucket)
 
 	// test
 	var buf bytes.Buffer
 	cmd := &cobra.Command{}
 	cmd.SetOut(&buf)
-	Run(cmd, []string{"s3://" + bucketName})
+	Run(cmd, []string{"s3://" + bucket.Name()})
 
 	re := regexp.MustCompile(`\A\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}          5 a.txt
 \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}          7 foo.zip
@@ -84,6 +97,7 @@ func TestLS_ListObjects(t *testing.T) {
 }
 
 func TestLS_recursive(t *testing.T) {
+	t.Parallel()
 	testutils.SkipIfUnitTest(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -92,11 +106,11 @@ func TestLS_recursive(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	bucketName, err := prepareBucket(ctx, svc)
+	bucket, err := prepareBucket(ctx, svc)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer testutils.DeleteBucket(context.Background(), svc, bucketName)
+	defer pool.Put(bucket)
 
 	recursive = true
 	defer func() {
@@ -107,7 +121,7 @@ func TestLS_recursive(t *testing.T) {
 	var buf bytes.Buffer
 	cmd := &cobra.Command{}
 	cmd.SetOut(&buf)
-	Run(cmd, []string{"s3://" + bucketName})
+	Run(cmd, []string{"s3://" + bucket.Name()})
 
 	re := regexp.MustCompile(`\A\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}          5 a.txt
 \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}          7 foo.zip
