@@ -529,7 +529,10 @@ func TestCP_Copy(t *testing.T) {
 }
 
 func TestCP_CopyMultipart(t *testing.T) {
-	t.Parallel()
+	// This test overwrites the global variable `maxCopyObjectBytes`.
+	// So, this test must be run in parallel.
+	// t.Parallel()
+
 	testutils.SkipIfUnitTest(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -581,89 +584,93 @@ func TestCP_CopyMultipart(t *testing.T) {
 	}
 }
 
-// func TestCP_CopyRecursive(t *testing.T) {
-// 	testutils.SkipIfUnitTest(t)
-// 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-// 	defer cancel()
+func TestCP_CopyRecursive(t *testing.T) {
+	// This test overwrites the global variable `recursive` and `maxCopyObjectBytes`.
+	// So, this test must be run in parallel.
+	// t.Parallel()
 
-// 	svc, err := config.NewS3Client(ctx)
-// 	if err != nil {
-// 		t.Fatal(err)
-// 	}
-// 	bucketName, err := testutils.CreateTemporaryBucket(ctx, svc)
-// 	if err != nil {
-// 		t.Fatal(err)
-// 	}
-// 	defer testutils.DeleteBucket(context.Background(), svc, bucketName)
+	testutils.SkipIfUnitTest(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
 
-// 	// prepare test files
-// 	content := []byte("temporary file's content")
-// 	dir, err := os.MkdirTemp("", "s3cli-mini")
-// 	if err != nil {
-// 		t.Fatal(err)
-// 	}
-// 	defer os.RemoveAll(dir)
-// 	keys := []string{
-// 		"a.txt",
-// 		"foo.zip",
-// 		"foo/bar/.baz/a",
-// 		"foo/bar/.baz/b",
-// 		"foo/bar/.baz/c",
-// 		"foo/bar/.baz/d",
-// 		"foo/bar/.baz/e",
-// 		"foo/bar/.baz/hooks/bar",
-// 		"foo/bar/.baz/hooks/foo",
-// 		"z.txt",
-// 	}
-// 	for _, key := range keys {
-// 		_, err := svc.PutObject(ctx, &s3.PutObjectInput{
-// 			Body:   bytes.NewReader(content),
-// 			Bucket: aws.String(bucketName),
-// 			Key:    aws.String(key),
-// 		})
-// 		if err != nil {
-// 			t.Fatal(err)
-// 		}
-// 	}
+	svc, err := config.NewS3Client(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bucket, err := pool.Get(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer pool.Put(bucket)
 
-// 	// test
-// 	original := maxCopyObjectBytes
-// 	recursive = true
-// 	defer func() {
-// 		recursive = false
-// 		maxCopyObjectBytes = original
-// 	}()
-// 	cmd := &cobra.Command{}
-// 	Run(cmd, []string{"s3://" + bucketName + "/foo", "s3://" + bucketName + "/fizz"})
+	// prepare test files
+	content := []byte("temporary file's content")
+	dir, err := os.MkdirTemp("", "s3cli-mini")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(dir)
+	keys := []string{
+		"a.txt",
+		"foo.zip",
+		"foo/bar/.baz/a",
+		"foo/bar/.baz/b",
+		"foo/bar/.baz/c",
+		"foo/bar/.baz/d",
+		"foo/bar/.baz/e",
+		"foo/bar/.baz/hooks/bar",
+		"foo/bar/.baz/hooks/foo",
+		"z.txt",
+	}
+	for _, key := range keys {
+		_, err := svc.PutObject(ctx, &s3.PutObjectInput{
+			Body:   bytes.NewReader(content),
+			Bucket: aws.String(bucket.Name()),
+			Key:    aws.String(key),
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
 
-// 	// check body
-// 	expected := []string{
-// 		"fizz/bar/.baz/a",
-// 		"fizz/bar/.baz/b",
-// 		"fizz/bar/.baz/c",
-// 		"fizz/bar/.baz/d",
-// 		"fizz/bar/.baz/e",
-// 		"fizz/bar/.baz/hooks/bar",
-// 		"fizz/bar/.baz/hooks/foo",
-// 	}
-// 	for _, key := range expected {
-// 		resp, err := svc.GetObject(ctx, &s3.GetObjectInput{
-// 			Bucket: aws.String(bucketName),
-// 			Key:    aws.String(key),
-// 		})
-// 		if err != nil {
-// 			t.Fatal(err)
-// 		}
-// 		body, err := io.ReadAll(resp.Body)
-// 		if err != nil {
-// 			t.Fatal(err)
-// 		}
-// 		resp.Body.Close()
-// 		if string(body) != string(content) {
-// 			t.Errorf("want %s, got %s", string(content), string(body))
-// 		}
-// 	}
-// }
+	// test
+	original := maxCopyObjectBytes
+	recursive = true
+	defer func() {
+		recursive = false
+		maxCopyObjectBytes = original
+	}()
+	cmd := &cobra.Command{}
+	Run(cmd, []string{"s3://" + bucket.Name() + "/foo", "s3://" + bucket.Name() + "/fizz"})
+
+	// check body
+	expected := []string{
+		"fizz/bar/.baz/a",
+		"fizz/bar/.baz/b",
+		"fizz/bar/.baz/c",
+		"fizz/bar/.baz/d",
+		"fizz/bar/.baz/e",
+		"fizz/bar/.baz/hooks/bar",
+		"fizz/bar/.baz/hooks/foo",
+	}
+	for _, key := range expected {
+		resp, err := svc.GetObject(ctx, &s3.GetObjectInput{
+			Bucket: aws.String(bucket.Name()),
+			Key:    aws.String(key),
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		if string(body) != string(content) {
+			t.Errorf("want %s, got %s", string(content), string(body))
+		}
+	}
+}
 
 // func TestCP_CopyRecursiveMultipart(t *testing.T) {
 // 	testutils.SkipIfUnitTest(t)
