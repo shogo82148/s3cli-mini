@@ -65,7 +65,7 @@ nfpms:
     builds:
       - cli-arm64
     homepage: https://github.com/shogo82148/s3cli-mini/
-    maintainer: Ichinose Shogo <shogo82148@gmail.com>
+    maintainer: ICHINOSE Shogo <shogo82148@gmail.com>
     description: Golang port for AWS Command Line Interface S3 subcommand.
     license: MIT
     formats:
@@ -101,14 +101,6 @@ blobs:
     bucket: shogo82148-rpm-temporary
     ids: [package-arm64]
     folder: centos/7/aarch64/s3cli-mini
-  - provider: s3
-    bucket: shogo82148-rpm-temporary
-    ids: [package-amd64]
-    folder: centos/8/x86_64/s3cli-mini
-  - provider: s3
-    bucket: shogo82148-rpm-temporary
-    ids: [package-arm64]
-    folder: centos/8/aarch64/s3cli-mini
   - provider: s3
     bucket: shogo82148-rpm-temporary
     ids: [package-amd64]
