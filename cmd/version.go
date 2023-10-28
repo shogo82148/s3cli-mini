@@ -29,9 +29,9 @@ import (
 )
 
 // the version is set by goreleaser
-var version = "" // .Version
+var version = ""
 
-// versionCmd represents the cp command
+// versionCmd shows the version of s3cli-mini.
 var versionCmd = &cobra.Command{
 	Use:   "version",
 	Short: "show the version of s3cli-mini.",
