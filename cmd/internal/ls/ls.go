@@ -133,7 +133,7 @@ func printObject(cmd *cobra.Command, obj types.Object) {
 	if humanReadable {
 		cmd.Printf("%s %10s %s\n", date, makeHumanReadable(aws.ToInt64(size)), aws.ToString(obj.Key))
 	} else {
-		cmd.Printf("%s %10d %s\n", date, size, aws.ToString(obj.Key))
+		cmd.Printf("%s %10d %s\n", date, aws.ToInt64(size), aws.ToString(obj.Key))
 	}
 }
 
