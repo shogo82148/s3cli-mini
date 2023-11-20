@@ -244,10 +244,10 @@ func TestCP_UploadPublicACL(t *testing.T) {
 	_, err = svc.PutPublicAccessBlock(ctx, &s3.PutPublicAccessBlockInput{
 		Bucket: aws.String(bucket.Name()),
 		PublicAccessBlockConfiguration: &types.PublicAccessBlockConfiguration{
-			BlockPublicAcls:       false,
-			BlockPublicPolicy:     false,
-			IgnorePublicAcls:      false,
-			RestrictPublicBuckets: true,
+			BlockPublicAcls:       aws.Bool(false),
+			BlockPublicPolicy:     aws.Bool(false),
+			IgnorePublicAcls:      aws.Bool(false),
+			RestrictPublicBuckets: aws.Bool(true),
 		},
 	})
 	if err != nil {
