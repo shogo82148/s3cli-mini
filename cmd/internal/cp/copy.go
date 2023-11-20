@@ -167,7 +167,7 @@ func (c *copier) initSize() error {
 	if err != nil {
 		return err
 	}
-	c.totalSize = resp.ContentLength
+	c.totalSize = aws.ToInt64(resp.ContentLength)
 	return nil
 }
 
@@ -195,13 +195,13 @@ func (c *copier) copyChunk(uploadID string, num int32, pos, lastByte int64) {
 		CopySource:      aws.String(c.srcBucket + "/" + c.srcKey),
 		CopySourceRange: aws.String(fmt.Sprintf("bytes=%d-%d", pos, lastByte)),
 		UploadId:        aws.String(uploadID),
-		PartNumber:      num,
+		PartNumber:      aws.Int32(num),
 	})
 	if err != nil {
 		c.setError(err)
 		return
 	}
-	part := types.CompletedPart{ETag: resp.CopyPartResult.ETag, PartNumber: num}
+	part := types.CompletedPart{ETag: resp.CopyPartResult.ETag, PartNumber: aws.Int32(num)}
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.parts = append(c.parts, part)

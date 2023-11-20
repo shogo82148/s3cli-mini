@@ -90,7 +90,7 @@ func listObjects(ctx context.Context, cmd *cobra.Command, path string) {
 		for len(contents) > 0 && len(prefixes) > 0 {
 			if aws.ToString(contents[0].Key) < aws.ToString(prefixes[0].Prefix) {
 				printObject(cmd, contents[0])
-				totalBytes += contents[0].Size
+				totalBytes += aws.ToInt64(contents[0].Size)
 				contents = contents[1:]
 			} else {
 				printPrefix(cmd, prefixes[0])
@@ -99,7 +99,7 @@ func listObjects(ctx context.Context, cmd *cobra.Command, path string) {
 		}
 		for _, obj := range contents {
 			printObject(cmd, obj)
-			totalBytes += obj.Size
+			totalBytes += aws.ToInt64(obj.Size)
 		}
 		for _, prefix := range prefixes {
 			printPrefix(cmd, prefix)
@@ -131,7 +131,7 @@ func printObject(cmd *cobra.Command, obj types.Object) {
 	date := aws.ToTime(obj.LastModified).In(time.Local).Format("2006-01-02 15:04:05")
 	size := obj.Size
 	if humanReadable {
-		cmd.Printf("%s %10s %s\n", date, makeHumanReadable(size), aws.ToString(obj.Key))
+		cmd.Printf("%s %10s %s\n", date, makeHumanReadable(aws.ToInt64(size)), aws.ToString(obj.Key))
 	} else {
 		cmd.Printf("%s %10d %s\n", date, size, aws.ToString(obj.Key))
 	}
