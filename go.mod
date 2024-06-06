@@ -5,8 +5,8 @@ go 1.22.0
 require (
 	github.com/aws/aws-sdk-go-v2 v1.27.1
 	github.com/aws/aws-sdk-go-v2/config v1.27.17
-	github.com/aws/aws-sdk-go-v2/feature/s3/manager v1.16.22
-	github.com/aws/aws-sdk-go-v2/service/s3 v1.54.4
+	github.com/aws/aws-sdk-go-v2/feature/s3/manager v1.16.23
+	github.com/aws/aws-sdk-go-v2/service/s3 v1.55.0
 	github.com/mitchellh/go-homedir v1.1.0
 	github.com/spf13/cobra v1.8.0
 	github.com/spf13/viper v1.19.0
