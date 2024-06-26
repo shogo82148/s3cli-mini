@@ -46,3 +46,4 @@ jobs:
             dist/*.deb
             dist/*.rpm
             dist/*.zip
+            dist/checksums.txt
