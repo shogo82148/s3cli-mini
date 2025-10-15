@@ -49,7 +49,7 @@ changelog:
 
 nfpms:
   - id: package-amd64
-    builds:
+    ids:
       - cli-amd64
     homepage: https://github.com/shogo82148/s3cli-mini/
     maintainer: ICHINOSE Shogo <shogo82148@gmail.com>
@@ -63,7 +63,7 @@ nfpms:
     epoch: 0
     bindir: /usr/bin
   - id: package-arm64
-    builds:
+    ids:
       - cli-arm64
     homepage: https://github.com/shogo82148/s3cli-mini/
     maintainer: ICHINOSE Shogo <shogo82148@gmail.com>
