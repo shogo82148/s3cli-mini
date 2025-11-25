@@ -1,6 +1,6 @@
 module github.com/shogo82148/s3cli-mini
 
-go 1.24.0
+go 1.25.4
 
 require (
 	github.com/aws/aws-sdk-go-v2 v1.40.0
