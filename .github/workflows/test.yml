@@ -31,7 +31,7 @@ jobs:
 
       - run: go mod download
       - name: Configure AWS Credentials
-        uses: fuller-inc/actions-aws-assume-role@ab8b68ccaa6a83d843cd6f9403fc3c0eb2e3af0c # v1.7.1
+        uses: fuller-inc/actions-aws-assume-role@1ccac830f7c1c1798a7b3bea3087dcc10ac7ea1b # v1.8.1
         continue-on-error: true
         with:
           aws-region: us-east-1
