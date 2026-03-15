@@ -2,12 +2,16 @@ package config
 
 import (
 	"context"
+	"errors"
+	"fmt"
+	"net/http"
 	"sync"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
-	"github.com/aws/aws-sdk-go-v2/feature/s3/manager"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/aws/smithy-go/middleware"
+	smithyhttp "github.com/aws/smithy-go/transport/http"
 	"github.com/shogo82148/s3cli-mini/cmd/internal/interfaces"
 	"github.com/spf13/cobra"
 )
@@ -101,11 +105,73 @@ func NewS3BucketClient(ctx context.Context, bucket string) (interfaces.S3Client,
 		return nil, err
 	}
 	svc := s3.NewFromConfig(cfg)
-	region, err := manager.GetBucketRegion(ctx, svc, bucket)
+	region, err := getBucketRegion(ctx, svc, bucket)
 	if err != nil {
 		return nil, err
 	}
 	cfg.Region = region
 	svc = s3.NewFromConfig(cfg)
 	return svc, nil
+}
+
+const bucketRegionHeader = "X-Amz-Bucket-Region"
+
+// getBucketRegion attempts to get the region for a bucket by calling HeadBucket.
+// It uses a deserialize middleware to capture the X-Amz-Bucket-Region response header.
+func getBucketRegion(ctx context.Context, svc *s3.Client, bucket string) (string, error) {
+	var regionCapture deserializeBucketRegion
+
+	_, err := svc.HeadBucket(ctx, &s3.HeadBucketInput{
+		Bucket: aws.String(bucket),
+	}, func(o *s3.Options) {
+		o.APIOptions = append(o.APIOptions, regionCapture.RegisterMiddleware)
+		// Use anonymous credentials so the request succeeds even if the
+		// current credentials do not have permissions for the bucket, while
+		// S3 still returns the X-Amz-Bucket-Region header in the response.
+		o.Credentials = nil
+	})
+	if len(regionCapture.BucketRegion) == 0 && err != nil {
+		var httpStatusErr interface {
+			HTTPStatusCode() int
+		}
+		if !errors.As(err, &httpStatusErr) {
+			return "", err
+		}
+		if httpStatusErr.HTTPStatusCode() == http.StatusNotFound {
+			return "", fmt.Errorf("bucket not found: %s", bucket)
+		}
+		return "", err
+	}
+
+	return regionCapture.BucketRegion, nil
+}
+
+type deserializeBucketRegion struct {
+	BucketRegion string
+}
+
+func (d *deserializeBucketRegion) RegisterMiddleware(stack *middleware.Stack) error {
+	return stack.Deserialize.Add(d, middleware.After)
+}
+
+func (d *deserializeBucketRegion) ID() string {
+	return "DeserializeBucketRegion"
+}
+
+func (d *deserializeBucketRegion) HandleDeserialize(ctx context.Context, in middleware.DeserializeInput, next middleware.DeserializeHandler) (
+	out middleware.DeserializeOutput, metadata middleware.Metadata, err error,
+) {
+	out, metadata, err = next.HandleDeserialize(ctx, in)
+	if err != nil {
+		return out, metadata, err
+	}
+
+	resp, ok := out.RawResponse.(*smithyhttp.Response)
+	if !ok {
+		return out, metadata, fmt.Errorf("unknown transport type %T", out.RawResponse)
+	}
+
+	d.BucketRegion = resp.Header.Get(bucketRegionHeader)
+
+	return out, metadata, err
 }
