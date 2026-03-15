@@ -17,7 +17,7 @@ import (
 	"github.com/shogo82148/s3cli-mini/cmd/internal/interfaces"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/feature/s3/manager"
+	"github.com/aws/aws-sdk-go-v2/feature/s3/transfermanager"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 	"github.com/shogo82148/s3cli-mini/cmd/internal/config"
@@ -79,7 +79,6 @@ type client struct {
 	semaphore      chan struct{}
 	cmd            *cobra.Command
 	s3             interfaces.S3Client
-	uploader       interfaces.UploaderClient
 	downloader     interfaces.DownloaderClient
 	followSymlinks bool
 	acl            types.ObjectCannedACL
@@ -181,8 +180,7 @@ func (c *client) Run(src, dist string) {
 		os.Exit(1)
 	}
 	c.s3 = svc
-	c.uploader = manager.NewUploader(svc)
-	c.downloader = manager.NewDownloader(svc)
+	c.downloader = transfermanager.New(svc)
 
 	if recursive {
 		switch {
@@ -304,9 +302,10 @@ func (c *client) s3local(src, dist string) error {
 	if err != nil {
 		return err
 	}
-	_, err = c.downloader.Download(c.ctx, f, &s3.GetObjectInput{
-		Bucket: aws.String(bucket),
-		Key:    aws.String(key),
+	_, err = c.downloader.DownloadObject(c.ctx, &transfermanager.DownloadObjectInput{
+		Bucket:   aws.String(bucket),
+		Key:      aws.String(key),
+		WriterAt: f,
 	})
 	if err != nil {
 		return err
@@ -373,9 +372,10 @@ func (c *client) s3localrecursive(src, dist string) error {
 		if err != nil {
 			return "", err
 		}
-		_, err = c.downloader.Download(c.ctx, f, &s3.GetObjectInput{
-			Bucket: aws.String(bucket),
-			Key:    aws.String(p),
+		_, err = c.downloader.DownloadObject(c.ctx, &transfermanager.DownloadObjectInput{
+			Bucket:   aws.String(bucket),
+			Key:      aws.String(p),
+			WriterAt: f,
 		})
 		if err != nil {
 			return "", err
