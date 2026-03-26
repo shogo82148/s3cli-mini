@@ -31,12 +31,11 @@ jobs:
 
       - run: go mod download
       - name: Configure AWS Credentials
-        uses: fuller-inc/actions-aws-assume-role@ab8b68ccaa6a83d843cd6f9403fc3c0eb2e3af0c # v1.7.1
+        uses: aws-actions/configure-aws-credentials@8df5847569e6427dd6c4fb1cf565c83acfa8afa7 # v6.0.0
         continue-on-error: true
         with:
           aws-region: us-east-1
           role-to-assume: arn:aws:iam::455234978633:role/s3cli-mini-TestRole6C9272DF-7K8JPM7FCTP9
-          role-session-tagging: true
 
       - name: Test
         run: |
