@@ -170,7 +170,7 @@ func (pool *BucketPool) createBucket(ctx context.Context, input *s3.CreateBucket
 }
 
 func (pool *BucketPool) waitForCreating(ctx context.Context, bucket *Bucket) error {
-	for i := 0; i < 60; i++ {
+	for range 60 {
 		_, err := pool.svc.HeadBucket(ctx, &s3.HeadBucketInput{
 			Bucket: aws.String(bucket.name),
 		})

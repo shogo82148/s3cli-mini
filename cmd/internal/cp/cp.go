@@ -331,9 +331,7 @@ func (c *client) s3localrecursive(src, dist string) error {
 	chResult := make(chan result, parallel)
 
 	// walk s3
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		defer close(chSource)
 		p := s3.NewListObjectsV2Paginator(c.s3, &s3.ListObjectsV2Input{
 			Bucket: aws.String(bucket),
@@ -356,7 +354,7 @@ func (c *client) s3localrecursive(src, dist string) error {
 				}
 			}
 		}
-	}()
+	})
 
 	// download workers
 	download := func(p string) (string, error) {

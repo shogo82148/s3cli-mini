@@ -45,8 +45,8 @@ func testFastWalk(t *testing.T, files map[string]string, callback func(path stri
 			t.Fatal(err)
 		}
 		var err error
-		if strings.HasPrefix(contents, "LINK:") {
-			err = os.Symlink(strings.TrimPrefix(contents, "LINK:"), file)
+		if after, ok := strings.CutPrefix(contents, "LINK:"); ok {
+			err = os.Symlink(after, file)
 		} else {
 			err = os.WriteFile(file, []byte(contents), 0644)
 		}

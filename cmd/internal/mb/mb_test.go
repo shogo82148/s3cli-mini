@@ -39,7 +39,7 @@ func TestMB(t *testing.T) {
 
 	// wait for the bucket is visible
 	time.Sleep(time.Second)
-	for i := 0; i < 60; i++ {
+	for range 60 {
 		_, err := svc.HeadBucket(ctx, &s3.HeadBucketInput{
 			Bucket: aws.String(bucketName),
 		})
