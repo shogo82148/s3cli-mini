@@ -39,7 +39,7 @@ func TestMB_Global(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 		if err := testutils.DeleteBucket(ctx, svc, bucketName); err != nil {
-			t.Fatal(err)
+			t.Error(err)
 		}
 	})
 
@@ -93,7 +93,7 @@ func TestMB_AccountRegional(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 		if err := testutils.DeleteBucket(ctx, svc, bucketName); err != nil {
-			t.Fatal(err)
+			t.Error(err)
 		}
 	})
 
