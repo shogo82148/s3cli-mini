@@ -3,15 +3,14 @@ package interfaces
 import (
 	"context"
 
-	"github.com/aws/aws-sdk-go-v2/feature/s3/manager"
+	"github.com/aws/aws-sdk-go-v2/feature/s3/transfermanager"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 )
 
 // S3Client is an interface for github.com/aws/aws-sdk-go-v2/service/s3.Client
 type S3Client interface {
 	s3.ListObjectsV2APIClient
-	manager.DownloadAPIClient
-	manager.UploadAPIClient
+	transfermanager.S3APIClient
 	BucketCreator
 
 	CopyObject(ctx context.Context, params *s3.CopyObjectInput, optFns ...func(*s3.Options)) (*s3.CopyObjectOutput, error)

@@ -6,7 +6,6 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
-	"github.com/aws/aws-sdk-go-v2/feature/s3/manager"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/shogo82148/s3cli-mini/cmd/internal/interfaces"
 	"github.com/spf13/cobra"
@@ -54,11 +53,7 @@ func LoadAWSConfig(ctx context.Context) (aws.Config, error) {
 	}
 
 	if endpointURL != "" {
-		cfg.EndpointResolverWithOptions = aws.EndpointResolverWithOptionsFunc(func(service, region string, options ...interface{}) (aws.Endpoint, error) {
-			return aws.Endpoint{
-				URL: endpointURL,
-			}, nil
-		})
+		cfg.BaseEndpoint = aws.String(endpointURL)
 	}
 	if debug {
 		cfg.ClientLogMode |= aws.LogSigning | aws.LogRetries | aws.LogRequest | aws.LogRequestWithBody | aws.LogResponse | aws.LogResponseWithBody
@@ -101,11 +96,13 @@ func NewS3BucketClient(ctx context.Context, bucket string) (interfaces.S3Client,
 		return nil, err
 	}
 	svc := s3.NewFromConfig(cfg)
-	region, err := manager.GetBucketRegion(ctx, svc, bucket)
+	out, err := svc.HeadBucket(ctx, &s3.HeadBucketInput{
+		Bucket: aws.String(bucket),
+	})
 	if err != nil {
 		return nil, err
 	}
-	cfg.Region = region
+	cfg.Region = aws.ToString(out.BucketRegion)
 	svc = s3.NewFromConfig(cfg)
 	return svc, nil
 }
