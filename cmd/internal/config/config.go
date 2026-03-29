@@ -6,6 +6,7 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/feature/s3/manager"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/shogo82148/s3cli-mini/cmd/internal/interfaces"
 	"github.com/spf13/cobra"
@@ -96,15 +97,11 @@ func NewS3BucketClient(ctx context.Context, bucket string) (interfaces.S3Client,
 		return nil, err
 	}
 	svc := s3.NewFromConfig(cfg)
-	out, err := svc.HeadBucket(ctx, &s3.HeadBucketInput{
-		Bucket: aws.String(bucket),
-	})
+	region, err := manager.GetBucketRegion(ctx, svc, bucket)
 	if err != nil {
 		return nil, err
 	}
-	if out.BucketRegion != nil && *out.BucketRegion != "" {
-		cfg.Region = *out.BucketRegion
-	}
+	cfg.Region = region
 	svc = s3.NewFromConfig(cfg)
 	return svc, nil
 }
