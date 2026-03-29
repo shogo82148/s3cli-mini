@@ -18,13 +18,15 @@ import (
 	"github.com/shogo82148/s3cli-mini/cmd/internal/interfaces"
 )
 
-func bucketPrefix() string {
+// BucketPrefix returns the bucket prefix for tests.
+// It is used for integration tests.
+func BucketPrefix() string {
 	return os.Getenv("S3CLI_TEST_BUCKET_PREFIX")
 }
 
 // SkipIfUnitTest skips join tests.
 func SkipIfUnitTest(t *testing.T) {
-	if bucketPrefix() == "" {
+	if BucketPrefix() == "" {
 		t.Skip("S3CLI_TEST_BUCKET_PREFIX environment value is not set. skip this test.")
 	}
 }
@@ -141,7 +143,7 @@ func (pool *BucketPool) createBucket(ctx context.Context, input *s3.CreateBucket
 	if _, err := rand.Read(b[:]); err != nil {
 		return nil, err
 	}
-	bucketName := bucketPrefix() + hex.EncodeToString(b[:])
+	bucketName := BucketPrefix() + hex.EncodeToString(b[:])
 	bucket := &Bucket{
 		name: bucketName,
 	}
@@ -201,13 +203,15 @@ func makeEmpty(ctx context.Context, svc DeleteBucketAPI, bucket *Bucket) error {
 	for p.HasMorePages() {
 		page, err := p.NextPage(ctx)
 		if err != nil {
-			return nil
+			return err
 		}
 		for _, obj := range page.Contents {
-			svc.DeleteObject(ctx, &s3.DeleteObjectInput{
+			if _, err := svc.DeleteObject(ctx, &s3.DeleteObjectInput{
 				Bucket: aws.String(bucket.name),
 				Key:    obj.Key,
-			})
+			}); err != nil {
+				return err
+			}
 		}
 	}
 	return nil
