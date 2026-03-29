@@ -35,7 +35,7 @@ jobs:
         continue-on-error: true
         with:
           aws-region: us-east-1
-          role-to-assume: arn:aws:iam::455234978633:role/s3cli-mini-TestRole6C9272DF-7K8JPM7FCTP9
+          role-to-assume: arn:aws:iam::455234978633:role/s3cli-mini-TestRole6C9272DF-lZVVLYuG7Csz
 
       - name: Test
         run: |
