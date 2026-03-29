@@ -102,7 +102,9 @@ func NewS3BucketClient(ctx context.Context, bucket string) (interfaces.S3Client,
 	if err != nil {
 		return nil, err
 	}
-	cfg.Region = aws.ToString(out.BucketRegion)
+	if out.BucketRegion != nil && *out.BucketRegion != "" {
+		cfg.Region = *out.BucketRegion
+	}
 	svc = s3.NewFromConfig(cfg)
 	return svc, nil
 }
