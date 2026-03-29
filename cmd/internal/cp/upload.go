@@ -180,9 +180,7 @@ func (u *uploader) upload() {
 	}
 
 	// complete
-	u.client.wg.Add(1)
-	go func() {
-		defer u.client.wg.Done()
+	u.client.wg.Go(func() {
 		wg.Wait()
 		u.body.Close()
 		if u.client.ctx.Err() != nil {
@@ -207,7 +205,7 @@ func (u *uploader) upload() {
 		if err != nil {
 			u.setError(err)
 		}
-	}()
+	})
 }
 
 func (u *uploader) initSize() {

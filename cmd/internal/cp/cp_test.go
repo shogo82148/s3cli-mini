@@ -731,7 +731,6 @@ func TestCP_CopyRecursiveMultipart(t *testing.T) {
 	{
 		g, ctx := errgroup.WithContext(ctx)
 		for _, key := range keys {
-			key := key
 			g.Go(func() error {
 				_, err := svc.PutObject(ctx, &s3.PutObjectInput{
 					Body:   bytes.NewReader(content),
@@ -764,7 +763,6 @@ func TestCP_CopyRecursiveMultipart(t *testing.T) {
 	{
 		g, ctx := errgroup.WithContext(ctx)
 		for _, key := range expected {
-			key := key
 			g.Go(func() error {
 				resp, err := svc.GetObject(ctx, &s3.GetObjectInput{
 					Bucket: aws.String(bucket.Name()),

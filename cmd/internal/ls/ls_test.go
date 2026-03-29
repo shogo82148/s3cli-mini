@@ -50,7 +50,6 @@ func prepareBucket(ctx context.Context, svc interfaces.S3Client) (*testutils.Buc
 
 	// prepare objects for test
 	for _, key := range keys {
-		key := key
 		_, err = svc.PutObject(ctx, &s3.PutObjectInput{
 			Bucket: aws.String(bucket.Name()),
 			Key:    aws.String(key),

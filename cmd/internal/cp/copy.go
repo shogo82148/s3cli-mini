@@ -128,9 +128,7 @@ func (c *copier) copy() {
 	}
 
 	// watch complete
-	c.client.wg.Add(1)
-	go func() {
-		defer c.client.wg.Done()
+	c.client.wg.Go(func() {
 		wg.Wait()
 		if c.client.ctx.Err() != nil {
 			// the request is aborted. clean up temporary resources.
@@ -156,7 +154,7 @@ func (c *copier) copy() {
 		if err != nil {
 			c.setError(err)
 		}
-	}()
+	})
 }
 
 func (c *copier) initSize() error {
