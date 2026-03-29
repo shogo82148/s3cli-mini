@@ -54,11 +54,7 @@ func LoadAWSConfig(ctx context.Context) (aws.Config, error) {
 	}
 
 	if endpointURL != "" {
-		cfg.EndpointResolverWithOptions = aws.EndpointResolverWithOptionsFunc(func(service, region string, options ...interface{}) (aws.Endpoint, error) {
-			return aws.Endpoint{
-				URL: endpointURL,
-			}, nil
-		})
+		cfg.BaseEndpoint = aws.String(endpointURL)
 	}
 	if debug {
 		cfg.ClientLogMode |= aws.LogSigning | aws.LogRetries | aws.LogRequest | aws.LogRequestWithBody | aws.LogResponse | aws.LogResponseWithBody
