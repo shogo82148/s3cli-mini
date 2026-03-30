@@ -35,4 +35,5 @@ var mbCmd = &cobra.Command{
 
 func init() {
 	rootCmd.AddCommand(mbCmd)
+	mb.Init(mbCmd)
 }
