@@ -78,6 +78,7 @@ nfpms:
     bindir: /usr/bin
 
 blobs:
+  # Amazon Linux 2
   - provider: s3
     bucket: shogo82148-rpm-temporary
     ids: [package-amd64]
@@ -86,6 +87,8 @@ blobs:
     bucket: shogo82148-rpm-temporary
     ids: [package-arm64]
     directory: amazonlinux/2/aarch64/s3cli-mini
+
+  # Amazon Linux 2023
   - provider: s3
     bucket: shogo82148-rpm-temporary
     ids: [package-amd64]
@@ -94,6 +97,8 @@ blobs:
     bucket: shogo82148-rpm-temporary
     ids: [package-arm64]
     directory: amazonlinux/2023/aarch64/s3cli-mini
+
+  # CentOS 7
   - provider: s3
     bucket: shogo82148-rpm-temporary
     ids: [package-amd64]
@@ -102,6 +107,8 @@ blobs:
     bucket: shogo82148-rpm-temporary
     ids: [package-arm64]
     directory: centos/7/aarch64/s3cli-mini
+
+  # AlmaLinux 8
   - provider: s3
     bucket: shogo82148-rpm-temporary
     ids: [package-amd64]
@@ -110,6 +117,28 @@ blobs:
     bucket: shogo82148-rpm-temporary
     ids: [package-arm64]
     directory: almalinux/8/aarch64/s3cli-mini
+
+  # AlmaLinux 9
+  - provider: s3
+    bucket: shogo82148-rpm-temporary
+    ids: [package-amd64]
+    directory: almalinux/9/x86_64/s3cli-mini
+  - provider: s3
+    bucket: shogo82148-rpm-temporary
+    ids: [package-arm64]
+    directory: almalinux/9/aarch64/s3cli-mini
+
+  # AlmaLinux 10
+  - provider: s3
+    bucket: shogo82148-rpm-temporary
+    ids: [package-amd64]
+    directory: almalinux/10/x86_64/s3cli-mini
+  - provider: s3
+    bucket: shogo82148-rpm-temporary
+    ids: [package-arm64]
+    directory: almalinux/10/aarch64/s3cli-mini
+
+  # Rocky Linux 8
   - provider: s3
     bucket: shogo82148-rpm-temporary
     ids: [package-amd64]
@@ -118,3 +147,23 @@ blobs:
     bucket: shogo82148-rpm-temporary
     ids: [package-arm64]
     directory: rockylinux/8/aarch64/s3cli-mini
+
+  # Rocky Linux 9
+  - provider: s3
+    bucket: shogo82148-rpm-temporary
+    ids: [package-amd64]
+    directory: rockylinux/9/x86_64/s3cli-mini
+  - provider: s3
+    bucket: shogo82148-rpm-temporary
+    ids: [package-arm64]
+    directory: rockylinux/9/aarch64/s3cli-mini
+
+  # Rocky Linux 10
+  - provider: s3
+    bucket: shogo82148-rpm-temporary
+    ids: [package-amd64]
+    directory: rockylinux/10/x86_64/s3cli-mini
+  - provider: s3
+    bucket: shogo82148-rpm-temporary
+    ids: [package-arm64]
+    directory: rockylinux/10/aarch64/s3cli-mini
