@@ -6,7 +6,7 @@ require (
 	github.com/aws/aws-sdk-go-v2 v1.41.12
 	github.com/aws/aws-sdk-go-v2/config v1.32.23
 	github.com/aws/aws-sdk-go-v2/feature/s3/manager v1.22.25
-	github.com/aws/aws-sdk-go-v2/feature/s3/transfermanager v0.2.6
+	github.com/aws/aws-sdk-go-v2/feature/s3/transfermanager v0.2.8
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.103.2
 	github.com/aws/aws-sdk-go-v2/service/sts v1.43.2
 	github.com/mitchellh/go-homedir v1.1.0
