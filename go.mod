@@ -5,9 +5,9 @@ go 1.25.4
 require (
 	github.com/aws/aws-sdk-go-v2 v1.43.3
 	github.com/aws/aws-sdk-go-v2/config v1.32.34
-	github.com/aws/aws-sdk-go-v2/feature/s3/manager v1.22.38
-	github.com/aws/aws-sdk-go-v2/feature/s3/transfermanager v0.3.8
-	github.com/aws/aws-sdk-go-v2/service/s3 v1.106.3
+	github.com/aws/aws-sdk-go-v2/feature/s3/manager v1.22.39
+	github.com/aws/aws-sdk-go-v2/feature/s3/transfermanager v0.3.9
+	github.com/aws/aws-sdk-go-v2/service/s3 v1.106.4
 	github.com/aws/aws-sdk-go-v2/service/sts v1.45.3
 	github.com/mitchellh/go-homedir v1.1.0
 	github.com/spf13/cobra v1.10.2
