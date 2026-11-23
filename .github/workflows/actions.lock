@@ -5,12 +5,12 @@ version: 'v0.0.3'
 workflows:
     '.github/workflows/codeql-analysis.yml':
         - 'actions/checkout@v7.0.1'
-        - 'actions/setup-go@v7.0.0'
+        - 'actions/setup-go@v7.1.0'
         - 'github/codeql-action@v4.39.3'
     '.github/workflows/release.yml':
         - 'actions/attest-build-provenance@v4.2.2'
         - 'actions/checkout@v7.0.1'
-        - 'actions/setup-go@v7.0.0'
+        - 'actions/setup-go@v7.1.0'
         - 'aws-actions/configure-aws-credentials@v6.3.0'
         - 'goreleaser/goreleaser-action@v7.3.0'
     '.github/workflows/reviewdog.yml':
@@ -19,7 +19,7 @@ workflows:
         - 'reviewdog/action-golangci-lint@v2.10.2'
     '.github/workflows/test.yml':
         - 'actions/checkout@v7.0.1'
-        - 'actions/setup-go@v7.0.0'
+        - 'actions/setup-go@v7.1.0'
         - 'aws-actions/configure-aws-credentials@v6.3.0'
         - 'goreleaser/goreleaser-action@v7.3.0'
         - 'shogo82148/actions-goveralls@v1.11.5'
@@ -41,9 +41,9 @@ dependencies:
         commit: 'sha1-3d3c42e5aac5ba805825da76410c181273ba90b1'
         owner_id: 44036562
         repo_id: 197814629
-    'actions/setup-go@v7.0.0':
-        ref: 'v7.0.0'
-        commit: 'sha1-b7ad1dad31e06c5925ef5d2fc7ad053ef454303e'
+    'actions/setup-go@v7.1.0':
+        ref: 'v7.1.0'
+        commit: 'sha1-d8cbb8045d7f43706b9177cceb36c1f91a6644d5'
         owner_id: 44036562
         repo_id: 192624594
     'aws-actions/configure-aws-credentials@v6.3.0':
